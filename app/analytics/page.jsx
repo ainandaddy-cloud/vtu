@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useRouter } from 'next/navigation';
 import AuthGuard from '../../components/AuthGuard';
+import { getGradePoint, unifyGrade } from '../../lib/vtuGrades';
 
 function AnalyticsContent() {
     const router = useRouter();
@@ -23,7 +24,37 @@ function AnalyticsContent() {
     const [remainingSems, setRemainingSems] = useState(4);
     const [topSubjects, setTopSubjects] = useState([]);
 
-    const GP = { 'O': 10, 'S': 10, 'A+': 9, 'A': 8, 'B+': 7, 'B': 6, 'C': 5, 'P': 4, 'F': 0, 'Ab': 0 };
+    const calcSGPA = (subjects) => {
+        const excludeGrades = ['PP', 'NP', 'W', 'DX', 'AU', 'X', 'NE'];
+
+        // Use a pool to ensure we only count one result per code in this semester
+        const subjectsPool = {};
+        subjects.forEach(m => {
+            const code = m.subject_code || m.code;
+            if (!subjectsPool[code]) subjectsPool[code] = m;
+        });
+
+        const poolItems = Object.values(subjectsPool);
+        const validSubs = poolItems.filter(m => !excludeGrades.includes((m.grade || '').trim().toUpperCase()));
+
+        let pts = 0, backlogs = 0;
+        validSubs.forEach(m => {
+            const grade = (m.grade || '').trim().toUpperCase();
+            const unified = unifyGrade(grade);
+            const gp = getGradePoint(m.grade || '', '2022', m.total_marks || m.total, m.see_marks ?? m.external ?? null);
+            pts += gp;
+            if (unified !== 'P') backlogs++;
+        });
+
+        const count = validSubs.length;
+        const sgpa = count > 0 ? (pts / count) : 0;
+
+        return {
+            sgpa,
+            totalCredits: 20,
+            backlogs
+        };
+    };
 
     useEffect(() => {
         const facSession = localStorage.getItem('faculty_session');
@@ -47,69 +78,112 @@ function AnalyticsContent() {
         try {
             const [{ data: marks1 }, { data: marks2 }] = await Promise.all([
                 supabase.from('marks').select('*').eq('student_usn', usn),
-                supabase.from('subject_marks').select('*').eq('usn', usn),
+                supabase.from('subject_marks').select(`*, results ( exam_name )`).eq('usn', usn),
             ]);
 
-            const allMarks = [...(marks1 || [])];
-            if (marks2?.length) {
-                marks2.forEach(rm => {
-                    const exists = allMarks.some(m => (m.subject_code === rm.subject_code || m.subject_code === rm.code) && m.semester === rm.semester);
-                    if (!exists) {
-                        allMarks.push({ ...rm, subject_name: rm.subject_name || rm.name, subject_code: rm.subject_code || rm.code, total_marks: rm.total, credits: rm.credits || 3 });
-                    }
-                });
-            }
+            // Combine all sources
+            const allRaw = [
+                ...(marks1 || []).map(m => ({ ...m, source: 'manual' })),
+                ...(marks2 || []).map(m => ({
+                    ...m,
+                    source: 'scraped',
+                    total_marks: m.total,
+                    subject_code: m.subject_code || m.code,
+                    subject_name: m.subject_name || m.name
+                }))
+            ];
 
-            // Group by semester
-            const grouped = {};
-            allMarks.forEach(m => {
-                const sem = m.semester || 1;
-                if (!grouped[sem]) grouped[sem] = [];
-                grouped[sem].push(m);
+            // ── DEDUPLICATION (The "Accurate Data" Fix) ──
+            const getRank = (grade) => {
+                const u = unifyGrade(grade);
+                if (u === 'P') return 4;
+                if (u === 'F') return 1;
+                if (u === 'A') return 0;
+                return 0;
+            };
+
+            const bestByCode = {};
+            allRaw.forEach(m => {
+                const code = (m.subject_code || '').trim().toUpperCase();
+                if (!code) return;
+
+                const existing = bestByCode[code];
+                if (!existing) {
+                    bestByCode[code] = m;
+                    return;
+                }
+
+                const newRank = getRank(m.grade);
+                const oldRank = getRank(existing.grade);
+
+                if (newRank > oldRank) {
+                    bestByCode[code] = m;
+                } else if (newRank === oldRank) {
+                    // Tie-breaker: Take higher marks or newer record
+                    const newTotal = Number(m.total_marks || 0);
+                    const oldTotal = Number(existing.total_marks || 0);
+                    if (newTotal > oldTotal) {
+                        bestByCode[code] = m;
+                    } else if (newTotal === oldTotal && m.id > existing.id) {
+                        bestByCode[code] = m;
+                    }
+                }
             });
 
-            // Calculate SGPA per semester
-            const semData = Object.entries(grouped)
-                .sort(([a], [b]) => a - b)
+            const deduplicated = Object.values(bestByCode);
+
+            // Group by semester for trajectory
+            const semGroups = {};
+            deduplicated.forEach(m => {
+                const sem = m.semester || 1;
+                if (!semGroups[sem]) semGroups[sem] = [];
+                semGroups[sem].push(m);
+            });
+
+            const semData = Object.entries(semGroups)
+                .sort(([a], [b]) => parseInt(a) - parseInt(b))
                 .map(([sem, subjects]) => {
-                    let pts = 0, cr = 0;
-                    subjects.forEach(m => {
-                        const c = m.credits || 3;
-                        pts += (GP[m.grade] || 0) * c;
-                        cr += c;
-                    });
-                    return { semester: parseInt(sem), sgpa: cr > 0 ? pts / cr : 0, subjects: subjects.length, credits: cr };
+                    const stats = calcSGPA(subjects);
+                    return {
+                        semester: parseInt(sem),
+                        sgpa: stats.sgpa,
+                        subjects: subjects.length,
+                        credits: stats.totalCredits,
+                        backlogs: stats.backlogs
+                    };
                 });
 
             setSemesterData(semData);
 
-            // Grade distribution
+            // Grade Density (from deduped best results)
             const gradeDist = {};
-            allMarks.forEach(m => {
+            deduplicated.forEach(m => {
                 const g = m.grade || 'Unknown';
                 gradeDist[g] = (gradeDist[g] || 0) + 1;
             });
             setGradeDistribution(gradeDist);
 
-            // CGPA
-            let totalPts = 0, totalCr = 0;
+            // True CGPA and Credits
+            let totalPts = 0, totalCr = 0, totalBacklogs = 0;
             semData.forEach(s => {
                 totalPts += s.sgpa * s.credits;
                 totalCr += s.credits;
+                totalBacklogs += s.backlogs;
             });
+
             const currentCgpa = totalCr > 0 ? totalPts / totalCr : 0;
             setCgpa(currentCgpa);
             setTotalCredits(totalCr);
-            setBacklogCount(allMarks.filter(m => m.grade === 'F' || m.grade === 'Ab').length);
+            setBacklogCount(totalBacklogs);
 
-            // Top Subjects
-            const sortedSubjects = [...allMarks]
+            // Top Performers
+            setTopSubjects(deduplicated
                 .sort((a, b) => (b.total_marks || 0) - (a.total_marks || 0))
-                .slice(0, 5);
-            setTopSubjects(sortedSubjects);
+                .slice(0, 5)
+            );
 
-            // Calculate Required SGPA (Projection)
-            const remainingCr = remainingSems * 24;
+            // Projection
+            const remainingCr = remainingSems * 20; // Use 20 as per user's logic
             const req = ((targetCgpa * (totalCr + remainingCr)) - (currentCgpa * totalCr)) / remainingCr;
             setRequiredSgpa(req);
 
@@ -142,9 +216,9 @@ function AnalyticsContent() {
     };
 
     const gradeColors = {
-        'O': '#10b981', 'S': '#10b981', 'A+': '#16A34A', 'A': '#3b82f6',
-        'B+': '#8b5cf6', 'B': '#f59e0b', 'C': '#06b6d4', 'P': '#6b7280',
-        'F': '#ef4444', 'Ab': '#ef4444', 'Unknown': '#9ca3af'
+        'O': '#16a34a', 'S': '#16a34a', 'A+': '#16a34a', 'A': '#2563eb',
+        'B+': 'var(--primary)', 'B': '#d97706', 'C': '#0891b2', 'P': '#78716c',
+        'F': '#dc2626', 'Ab': '#dc2626', 'Unknown': '#a8a29e'
     };
 
     const maxGradeCount = Math.max(...Object.values(gradeDistribution), 1);
@@ -209,10 +283,13 @@ function AnalyticsContent() {
                 <>
                     {/* Summary Matrix */}
                     <div className="gf-stats-grid">
-                        <div style={{ ...s.card, background: 'linear-gradient(135deg, var(--primary), #8B5CF6)', border: 'none' }}>
-                            <div style={{ ...s.cardLabel, color: 'rgba(255,255,255,0.6)' }}>Current CGPA</div>
-                            <div style={{ ...s.cardVal, color: '#FFFFFF' }}>{cgpa > 0 ? cgpa.toFixed(2) : '0.00'}</div>
-                            <div style={{ ...s.cardSub, color: 'rgba(255,255,255,0.7)' }}>
+                        <div style={{ ...s.card, background: 'var(--primary)', border: 'none', position: 'relative', overflow: 'hidden' }}>
+                            {/* Subtle Glow Effect */}
+                            <div style={{ position: 'absolute', top: '-50%', left: '-50%', width: '200%', height: '200%', background: 'radial-gradient(circle, rgba(255,255,255,0.05) 0%, transparent 70%)', pointerEvents: 'none' }} />
+
+                            <div style={{ ...s.cardLabel, color: 'var(--bg)', opacity: 0.6, position: 'relative' }}>Current CGPA</div>
+                            <div style={{ ...s.cardVal, color: 'var(--bg)', position: 'relative' }}>{cgpa > 0 ? cgpa.toFixed(2) : '0.00'}</div>
+                            <div style={{ ...s.cardSub, color: 'var(--bg)', opacity: 0.8, position: 'relative' }}>
                                 <span className="material-icons-round" style={{ fontSize: '14px' }}>stars</span>
                                 {classification}
                             </div>

@@ -7,19 +7,29 @@ import AuthGuard from '../../components/AuthGuard';
 import { getGradePoint, unifyGrade } from '../../lib/vtuGrades';
 
 function calcSGPA(subjects) {
-    let pts = 0, cr = 0;
     const excludeGrades = ['PP', 'NP', 'W', 'DX', 'AU', 'X', 'NE'];
-    subjects.forEach(m => {
-        const grade = (m.grade || '').trim().toUpperCase();
-        if (excludeGrades.includes(grade)) return; // Don't count non-credit/audit grades
+    const validSubs = subjects.filter(m => !excludeGrades.includes((m.grade || '').trim().toUpperCase()));
 
-        const c = (typeof m.credits === 'number' && !isNaN(m.credits)) ? m.credits : 3;
+    let pts = 0, backlogs = 0;
+    validSubs.forEach(m => {
+        const grade = (m.grade || '').trim().toUpperCase();
+        const unified = unifyGrade(grade);
         const computed_pts = getGradePoint(grade, '2022', m.total_marks || m.total, m.see_marks ?? m.external ?? null);
 
-        pts += computed_pts * c;
-        cr += c;
+        pts += computed_pts;
+        if (unified !== 'P') backlogs++;
     });
-    return { sgpa: cr > 0 ? (pts / cr) : 0, credits: cr };
+
+    const count = validSubs.length;
+    const sgpa = count > 0 ? (pts / count) : 0;
+
+    return {
+        sgpa,
+        totalCredits: 20,
+        earnedCredits: (backlogs === 0 && count > 0) ? 20 : '—',
+        backlogs,
+        gradePoints: sgpa * 20
+    };
 }
 
 function DashboardContent() {
@@ -28,6 +38,7 @@ function DashboardContent() {
     const [loading, setLoading] = useState(true);
     const [marks, setMarks] = useState({});
     const [sgpas, setSgpas] = useState({});
+    const [semStats, setSemStats] = useState({});
     const [cgpa, setCgpa] = useState(0);
     const [percentage, setPercentage] = useState(0);
     const [pdfLoading, setPdfLoading] = useState(false);
@@ -205,16 +216,19 @@ function DashboardContent() {
 
             // Calculate SGPAs per semester and overall CGPA
             const semSGPAs = {};
+            const stats = {};
             let totalWeighted = 0, totalCr = 0;
             Object.entries(grouped)
                 .sort(([a], [b]) => Number(a) - Number(b))
                 .forEach(([sem, subjects]) => {
-                    const { sgpa, credits } = calcSGPA(subjects);
-                    semSGPAs[sem] = sgpa;
-                    totalWeighted += sgpa * credits;
-                    totalCr += credits;
+                    const res = calcSGPA(subjects);
+                    semSGPAs[sem] = res.sgpa;
+                    stats[sem] = res;
+                    totalWeighted += res.sgpa * res.totalCredits;
+                    totalCr += res.totalCredits;
                 });
             setSgpas(semSGPAs);
+            setSemStats(stats);
 
             const calculatedCGPA = totalCr > 0 ? totalWeighted / totalCr : 0;
             setCgpa(calculatedCGPA);
@@ -691,6 +705,49 @@ function DashboardContent() {
                                     </div>
                                 ))}
                             </div>
+                        </div>
+                    </div>
+
+                    {/* SEMESTER PERFORMANCE SUMMARY TABLE */}
+                    <div style={{ ...s.semCard, padding: '24px', marginBottom: '32px' }}>
+                        <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--tx-dim)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '24px' }}>Semester-Wise Performance</div>
+                        <div className="gf-table-wrap" style={{ border: 'none', borderRadius: 0 }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                <thead>
+                                    <tr>
+                                        <th style={s.th}>Semester</th>
+                                        <th style={{ ...s.th, textAlign: 'center' }}>SGPA</th>
+                                        <th style={{ ...s.th, textAlign: 'center' }}>Credits (Earned)</th>
+                                        <th style={{ ...s.th, textAlign: 'center' }}>Grade Points</th>
+                                        <th style={{ ...s.th, textAlign: 'center' }}>Backlogs</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {sortedSemesters.map(([sem]) => {
+                                        const stat = semStats[sem] || { sgpa: 0, earnedCredits: 0, gradePoints: 0, backlogs: 0 };
+                                        return (
+                                            <tr key={sem}>
+                                                <td style={{ ...s.td, fontWeight: 800 }}>Semester {sem}</td>
+                                                <td style={{ ...s.td, textAlign: 'center', fontWeight: 900, color: 'var(--primary)' }}>{stat.sgpa.toFixed(2)}</td>
+                                                <td style={{ ...s.td, textAlign: 'center' }}>{stat.earnedCredits}</td>
+                                                <td style={{ ...s.td, textAlign: 'center' }}>{stat.gradePoints.toFixed(2)}</td>
+                                                <td style={{ ...s.td, textAlign: 'center' }}>
+                                                    <span style={{
+                                                        color: stat.backlogs > 0 ? 'var(--red)' : 'var(--green)',
+                                                        fontWeight: 900,
+                                                        background: stat.backlogs > 0 ? 'var(--red-bg)' : 'var(--green-bg)',
+                                                        padding: '4px 10px',
+                                                        borderRadius: '8px',
+                                                        fontSize: '11px'
+                                                    }}>
+                                                        {stat.backlogs === 0 ? 'Clear ✓' : stat.backlogs}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
 

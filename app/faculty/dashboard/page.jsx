@@ -12,6 +12,7 @@ function FacultyDashboardContent() {
     const [student, setStudent] = useState(null);
     const [marks, setMarks] = useState({});
     const [sgpas, setSgpas] = useState({});
+    const [semStats, setSemStats] = useState({});
     const [cgpa, setCgpa] = useState(0);
     const [message, setMessage] = useState('');
     const [pdfLoading, setPdfLoading] = useState(false);
@@ -20,49 +21,48 @@ function FacultyDashboardContent() {
     const [showBacklogModal, setShowBacklogModal] = useState(false);
     const pollRef = useRef(null);
 
-    const stopScraping = () => {
+    const stopScraping = (silent = false) => {
         if (pollRef.current) {
             clearInterval(pollRef.current);
             pollRef.current = null;
         }
         setScraping(false);
         setScrapeProgress('');
-        setMessage('✓ Scraping scan halted.');
-        lookupStudent(student?.usn || usn, true);
+        if (!silent) setMessage('✓ Scraping scan halted.');
     };
 
     const calcSGPA = (subjects) => {
-        // Find the best attempt for each subject
-        const bestGrades = {};
-
-        // This GRADE_RANK is just for figuring out which attempt is chronologically "better"
-        // 'P' is actually better than 'F'. If points are identical, prefer higher marks.
-        subjects.forEach(m => {
-            const code = m.subject_code || m.code;
-            const pts = getGradePoint(m.grade || '', '2022', m.total_marks || m.total, m.see_marks ?? m.external ?? null);
-
-            if (!bestGrades[code]) {
-                bestGrades[code] = { ...m, computed_pts: pts };
-            } else {
-                if (pts > bestGrades[code].computed_pts) {
-                    bestGrades[code] = { ...m, computed_pts: pts };
-                }
-            }
-        });
-
-        const optimalSubjects = Object.values(bestGrades);
-        let pts = 0, cr = 0;
         const excludeGrades = ['PP', 'NP', 'W', 'DX', 'AU', 'X', 'NE'];
 
-        optimalSubjects.forEach(m => {
-            const grade = (m.grade || '').trim().toUpperCase();
-            if (excludeGrades.includes(grade)) return; // Exclude non-credit entries
-
-            const c = (typeof m.credits === 'number' && !isNaN(m.credits)) ? m.credits : 3;
-            pts += m.computed_pts * c;
-            cr += c;
+        // Group by code to handle multiple attempts for same subject
+        const subjectsPool = {};
+        subjects.forEach(m => {
+            const code = m.subject_code || m.code;
+            if (!subjectsPool[code]) subjectsPool[code] = m;
         });
-        return { sgpa: cr > 0 ? (pts / cr) : 0, credits: cr };
+
+        const poolItems = Object.values(subjectsPool);
+        const validSubs = poolItems.filter(m => !excludeGrades.includes((m.grade || '').trim().toUpperCase()));
+
+        let pts = 0, backlogs = 0;
+        validSubs.forEach(m => {
+            const grade = (m.grade || '').trim().toUpperCase();
+            const unified = unifyGrade(grade);
+            const gp = getGradePoint(m.grade || '', '2022', m.total_marks || m.total, m.see_marks ?? m.external ?? null);
+            pts += gp;
+            if (unified !== 'P') backlogs++;
+        });
+
+        const count = validSubs.length;
+        const sgpa = count > 0 ? (pts / count) : 0;
+
+        return {
+            sgpa,
+            totalCredits: 20,
+            earnedCredits: (backlogs === 0 && count > 0) ? 20 : '—',
+            backlogs,
+            gradePoints: sgpa * 20
+        };
     };
 
     useEffect(() => {
@@ -78,9 +78,18 @@ function FacultyDashboardContent() {
             return;
         }
 
+        // If it's a new USN search, clear previous student data immediately
+        const cleanUSN = targetUsn.toUpperCase().trim();
+        if (student?.usn !== cleanUSN) {
+            setStudent(null);
+            setMarks({});
+            setSgpas({});
+            setSemStats({});
+            setCgpa(0);
+        }
+
         if (!silent) setLoading(true);
         setMessage('');
-        const cleanUSN = targetUsn.toUpperCase().trim();
 
         try {
             let { data: profile } = await supabase.from('students').select('*').eq('usn', cleanUSN).maybeSingle();
@@ -110,22 +119,63 @@ function FacultyDashboardContent() {
                     .trim();
             };
 
+            // ── DEDUPLICATION & BEST RESULT LOGIC ──
+            const bestByCode = {};
+
+            const getGradeRank = (grade) => {
+                const unified = unifyGrade(grade);
+                if (unified === 'P') return 4; // Pass (all pass grades)
+                if (unified === 'F') return 1; // Fail
+                if (unified === 'A') return 0; // Absent
+                return 0;
+            };
+
             const allMarksRaw = [
                 ...(studentMarks || []).map(m => ({ ...m, source: 'manual', exam_date: 'Manual Entry' })),
-                ...(resultMarks || []).map(m => ({ ...m, source: 'scraped', cie_marks: m.internal, see_marks: m.external, total_marks: m.total, exam_date: m.announced_date || formatExamAlias(m.results?.exam_name || 'Scraped Record') }))
+                ...(resultMarks || []).map(m => ({
+                    ...m,
+                    source: 'scraped',
+                    cie_marks: m.internal,
+                    see_marks: m.external,
+                    total_marks: m.total,
+                    exam_date: m.announced_date || formatExamAlias(m.results?.exam_name || 'Scraped Record')
+                }))
             ];
 
-            const groupedBySem = {};
             allMarksRaw.forEach(m => {
+                const code = (m.subject_code || m.code || '').trim().toUpperCase();
+                if (!code) return;
+
+                // Track correct semester
                 let sem = m.semester || 1;
-                const code = m.subject_code || m.code || '';
-                if (code) {
-                    const match = code.match(/^[0-9]{2,3}[A-Z]{2,3}(\d)\d/i) || code.match(/^[A-Z]{2,3}(\d)\d/i);
-                    if (match && match[1]) {
-                        sem = parseInt(match[1], 10);
+                const match = code.match(/^[0-9]{2,3}[A-Z]{2,3}(\d)\d/i) || code.match(/^[A-Z]{2,3}(\d)\d/i);
+                if (match && match[1]) sem = parseInt(match[1], 10);
+                m.semester = sem;
+
+                const existing = bestByCode[code];
+                if (!existing) {
+                    bestByCode[code] = m;
+                } else {
+                    const existingRank = getGradeRank(existing.grade);
+                    const newRank = getGradeRank(m.grade);
+
+                    // Logic: Keep better grade rank. If tied, keep higher total marks. 
+                    // If still tied, keep the one with a more descriptive exam date (likely more recent)
+                    if (newRank > existingRank) {
+                        bestByCode[code] = m;
+                    } else if (newRank === existingRank) {
+                        if ((m.total_marks || 0) > (existing.total_marks || 0)) {
+                            bestByCode[code] = m;
+                        } else if (m.id > existing.id) { // Fallback to ID for "latest" if marks equal
+                            bestByCode[code] = m;
+                        }
                     }
                 }
+            });
 
+            const groupedBySem = {};
+            Object.values(bestByCode).forEach(m => {
+                const sem = m.semester;
                 if (!groupedBySem[sem]) groupedBySem[sem] = [];
                 groupedBySem[sem].push(m);
             });
@@ -142,14 +192,17 @@ function FacultyDashboardContent() {
             setMarks(groupedBySem);
 
             const semSGPAs = {};
+            const stats = {};
             let tW = 0, tC = 0;
             Object.entries(groupedBySem).forEach(([sem, subjects]) => {
-                const { sgpa, credits } = calcSGPA(subjects);
-                semSGPAs[sem] = sgpa;
-                tW += sgpa * credits; tC += credits;
+                const res = calcSGPA(subjects);
+                semSGPAs[sem] = res.sgpa;
+                stats[sem] = res;
+                tW += res.sgpa * res.totalCredits; tC += res.totalCredits;
             });
 
             setSgpas(semSGPAs);
+            setSemStats(stats);
             setCgpa(tC > 0 ? tW / tC : 0);
 
             // Audit Log
@@ -177,10 +230,20 @@ function FacultyDashboardContent() {
     const [forceDeep, setForceDeep] = useState(false);
 
     const fetchFromVTU = async () => {
-        const targetUsn = student?.usn || usn;
-        if (!targetUsn || targetUsn.length < 5) return;
+        // PRIORITIZE the input box USN if provided, otherwise fallback to loaded student
+        const targetUsn = usn?.trim() || student?.usn;
+        if (!targetUsn || targetUsn.length < 5) {
+            setMessage('Please enter a valid USN to fetch.');
+            return;
+        }
+
+        const cleanUSN = targetUsn.toUpperCase().trim();
+
+        // Stop any existing polling before starting a new one
+        stopScraping(true);
+
         setScraping(true);
-        setScrapeProgress('Initializing sequential deep scan...');
+        setScrapeProgress(`Initializing deep scan for ${cleanUSN}...`);
         setMessage('');
 
         try {
@@ -188,7 +251,7 @@ function FacultyDashboardContent() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    usn: targetUsn.toUpperCase().trim(),
+                    usn: cleanUSN,
                     role: 'faculty',
                     force: true,
                     faculty_id: faculty?.id
@@ -200,21 +263,21 @@ function FacultyDashboardContent() {
                 setMessage('✓ Results already present in database (Cache Hit).');
                 setScraping(false);
                 setScrapeProgress('');
-                await lookupStudent(targetUsn);
+                await lookupStudent(cleanUSN);
                 return;
             }
 
             if (json.jobId || json.status === 'queued') {
                 const jobId = json.jobId;
-                setScrapeProgress('Job queued. Processing VTU portals sequentially...');
+                setScrapeProgress(`Job ${jobId?.substring(0, 6)} queued. Scanning VTU portals for ${cleanUSN}...`);
 
                 let attempts = 0;
                 pollRef.current = setInterval(async () => {
                     attempts++;
 
                     // Live UI Update: Fetch data EVEN while scraping to show results as they come in
-                    if (attempts % 2 === 0) {
-                        lookupStudent(targetUsn, true); // Suppress full loading state
+                    if (attempts % 3 === 0) {
+                        lookupStudent(cleanUSN, true); // Suppress full loading state
                     }
 
                     try {
@@ -462,36 +525,66 @@ function FacultyDashboardContent() {
                         </div>
                     </div>
 
-                    {showBacklogModal && (
-                        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(10px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-                            <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '24px', width: '100%', maxWidth: '600px', maxHeight: '80vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }} className="gf-fade-up">
-                                <div style={{ padding: '24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div>
-                                        <h3 style={{ fontSize: '20px', fontWeight: 900, color: 'var(--tx-main)', letterSpacing: '-0.03em' }}>Backlog Subjects</h3>
-                                        <p style={{ fontSize: '13px', color: 'var(--tx-muted)', fontWeight: 600 }}>Active backlogs identified for this USN.</p>
+                    {/* CGPA Summary Bar */}
+                    <div className="gf-result-bar" style={{ marginBottom: '32px' }}>
+                        <div>
+                            <div style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '4px', opacity: 0.6 }}>Overall CGPA</div>
+                            <div style={{ fontSize: 'clamp(28px, 5vw, 40px)', fontWeight: 900 }}>{cgpa.toFixed(2)}</div>
+                            <div style={{ fontSize: '12px', fontWeight: 600, opacity: 0.6 }}>{((cgpa - 0.75) * 10).toFixed(1)}% Equivalent</div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                {Object.keys(marks).sort((a, b) => a - b).map(sem => (
+                                    <div key={sem} style={{ fontSize: '10px', fontWeight: 800, background: 'rgba(255,255,255,0.1)', padding: '3px 8px', borderRadius: '6px' }}>
+                                        S{sem}: {(sgpas[sem] || 0).toFixed(2)}
                                     </div>
-                                    <button onClick={() => setShowBacklogModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tx-muted)' }}>
-                                        <span className="material-icons-round">close</span>
-                                    </button>
-                                </div>
-                                <div style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                        {backlogs.map((m, idx) => (
-                                            <div key={idx} style={{ padding: '16px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <div>
-                                                    <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--tx-main)' }}>{m.subject_name || m.name}</div>
-                                                    <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--tx-dim)', marginTop: '2px' }}>{m.subject_code || m.code} · Sem {m.semester}</div>
-                                                </div>
-                                                <div style={{ fontSize: '14px', fontWeight: 900, color: 'var(--red)', background: 'var(--red-bg)', padding: '6px 12px', borderRadius: '8px' }}>
-                                                    {unifyGrade(m.grade) === 'A' ? 'Absent' : 'FAIL'}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
+                                ))}
                             </div>
                         </div>
-                    )}
+                    </div>
+
+                    {/* SEMESTER PERFORMANCE SUMMARY TABLE */}
+                    <div style={{ ...c.semCard, padding: '24px', marginBottom: '32px' }}>
+                        <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--tx-dim)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '24px' }}>Semester-Wise Performance Summary</div>
+                        <div style={{ width: '100%', overflowX: 'auto' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                <thead>
+                                    <tr>
+                                        <th style={c.th}>Semester</th>
+                                        <th style={{ ...c.th, textAlign: 'center' }}>SGPA</th>
+                                        <th style={{ ...c.th, textAlign: 'center' }}>Credits (Earned)</th>
+                                        <th style={{ ...c.th, textAlign: 'center' }}>Grade Points</th>
+                                        <th style={{ ...c.th, textAlign: 'center' }}>Backlogs</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {Object.keys(marks).sort((a, b) => a - b).map(sem => {
+                                        const stat = semStats[sem] || { sgpa: 0, earnedCredits: 0, gradePoints: 0, backlogs: 0 };
+                                        return (
+                                            <tr key={sem}>
+                                                <td style={{ ...c.td, fontWeight: 800 }}>Semester {sem}</td>
+                                                <td style={{ ...c.td, textAlign: 'center', fontWeight: 900, color: 'var(--primary)' }}>{stat.sgpa.toFixed(2)}</td>
+                                                <td style={{ ...c.td, textAlign: 'center' }}>{stat.earnedCredits}</td>
+                                                <td style={{ ...c.td, textAlign: 'center' }}>{stat.gradePoints.toFixed(2)}</td>
+                                                <td style={{ ...c.td, textAlign: 'center' }}>
+                                                    <span style={{
+                                                        color: stat.backlogs > 0 ? 'var(--red)' : 'var(--green)',
+                                                        fontWeight: 900,
+                                                        background: stat.backlogs > 0 ? 'var(--red-bg)' : 'var(--green-bg)',
+                                                        padding: '4px 10px',
+                                                        borderRadius: '8px',
+                                                        fontSize: '11px'
+                                                    }}>
+                                                        {stat.backlogs === 0 ? 'Clear ✓' : stat.backlogs}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
 
                     {Object.entries(marks).sort(([a], [b]) => a - b).map(([sem, subjects]) => (
                         <div key={sem} style={c.semCard}>

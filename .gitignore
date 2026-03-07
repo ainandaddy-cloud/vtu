@@ -32,3 +32,12 @@ Thumbs.db
 *.pdf
 tmp/
 temp/
+training_data/
+backend/debug*
+debug_*/
+*.png
+*.jpg
+*.jpeg
+!app/public/*.png
+!app/public/*.jpg
+!app/public/*.jpeg
