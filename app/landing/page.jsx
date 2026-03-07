@@ -145,13 +145,18 @@ export default function LandingPage() {
             </section>
 
             <footer style={s.footer}>
-                <p style={s.footerText}>© 2026 GradeFlow · Academic Intelligence System · All data is private and institution-bound.</p>
-                <p style={{ ...s.footerText, marginTop: '8px', opacity: 0.7 }}>
-                    Powered by{' '}
-                    <a href="https://automaticxai.online" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'underline', fontWeight: 700 }}>
-                        automaticxai.online
-                    </a>
-                </p>
+                <p style={s.footerText}>© 2026 GradeFlow · Academic Intelligence System · Private Institutional Network</p>
+                <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <p style={{ ...s.footerText, fontSize: '11px', opacity: 0.7 }}>
+                        Developed by <strong>Mohammed Ainan Armar</strong> & <strong>Rawahah Ruknuddin</strong>
+                    </p>
+                    <p style={{ ...s.footerText, opacity: 0.9 }}>
+                        Powered by{' '}
+                        <a href="https://automaticxai.online" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'underline', fontWeight: 800 }}>
+                            automaticxai.online
+                        </a>
+                    </p>
+                </div>
             </footer>
         </div>
     );

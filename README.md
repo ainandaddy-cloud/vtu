@@ -1,21 +1,13 @@
 <div align="center">
-
-  <h1>UIU Calculator & Planner</h1>
-  <a href="https://uiucalculator.kawsar.dev/">
-    <img src="./assets/image/uiu-calculator-promo.png" alt="UIU Calculator Banner" width="100%">
-  </a>
+  <h1>GradeFlow: VTU Academic Intelligence</h1>
+  <p><strong>Advanced Scraper, SGPA/CGPA Calculator & Faculty Command Center</strong></p>
+  
   <p>
-    <strong>Meet your new study mate! 🙌</strong>
-    <br>
-    We take care of the math for your <strong>CGPA</strong>, planning your <strong>Target Grades</strong>, and estimating your <strong>Tuition Fees</strong>.
-  </p>
-
-  <p>
-    <a href="https://uiucalculator.kawsar.dev/">
-      <img src="https://img.shields.io/website?url=https%3A%2F%2Fuiucalculator.kawsar.dev&style=for-the-badge&label=Live%20Demo&logo=google-chrome&logoColor=white&color=ff6b6b" alt="Website Status">
+    <a href="https://automaticxai.online/">
+      <img src="https://img.shields.io/badge/Powered%20By-AutomaticXAI-black?style=for-the-badge" alt="AutomaticXAI">
     </a>
-    <a href="https://github.com/kawsarcodes/uiu-calculator">
-      <img src="https://img.shields.io/github/last-commit/kawsarcodes/uiu-calculator?style=for-the-badge&color=blue" alt="Last Commit">
+    <a href="https://github.com/ainandaddy-cloud/vtu">
+      <img src="https://img.shields.io/github/last-commit/ainandaddy-cloud/vtu?style=for-the-badge&color=2ecc71" alt="Last Commit">
     </a>
   </p>
 </div>
@@ -24,25 +16,29 @@
 
 ## 🚀 About The Project
 
-Calculating grades and planning finances shouldn't be a headache. This project is an **all-in-one academic toolkit** designed specifically for **United International University (UIU)** students.
-
-It replaces manual calculation errors with a fast, responsive, and mobile-friendly interface.
+**GradeFlow** is a robust, production-ready academic intelligence platform specifically architected for students and faculty under **Visvesvaraya Technological University (VTU)**. It eliminates the manual work of tracking results, handling complex VTU grading criteria (Pass/Fail distinction, Backlog deduplication), and provides a high-performance scraping engine for real-time data retrieval.
 
 ## ✨ Key Features
 
-*   **🎓 CGPA Calculator:** Instantly calculates your GPA and CGPA based on the official UIU grading policy.
-*   **🎯 Target CGPA Planner:** The "Magic" tool. Tell it your current CGPA and your goal (e.g., "I want a 3.5"), and it tells you exactly what GPA you need in the next trimester.
-*   **💰 Tuition Fee Calculator:** Enter redits and waiver/scholarship percentage to get an accurate breakdown of your installment fees.
+*   **📊 Accurate SGPA/CGPA Logic:** Strictly follows VTU 2022/2025 NEP schemes with robust deduplication (prioritizing your best attempts).
+*   **🕷️ High-Speed Scraper:** Real-time multi-portal scraper with automated Captcha solving and job queue management.
+*   **🏢 Faculty Command Center:** Specialized dashboard for faculty to perform deep-link USN lookups, bulk academic analytics, and audit logs.
+*   **📱 Modern UI:** Premium "Natural Charcoal" theme with glassmorphism effects and full mobile responsiveness.
+*   **🛡️ Data Integrity:** Advanced logic to handle "Sticky USN" sessions and ensure every USN is treated as a clean, isolated record.
 
-## 👨‍💻 Developed By
+## 👨‍💻 Developed & Maintained By
 
-**Kawsar Ahmed**
+The GradeFlow system is built and maintained with a focus on academic excellence and technical precision.
 
-*   Website: [kawsar.dev](https://kawsar.dev/)
-*   GitHub: [@kawsarcodes](https://github.com/kawsarcodes)
+**Development Team:**
+*   **Mohammed Ainan Armar**
+*   **Rawahah Ruknuddin**
+
+**Powered By:**
+*   [automaticxai.online](https://automaticxai.online)
 
 ---
 
 <div align="center">
-  <sub>Made with ❤️ for UIU Students</sub>
-</div
+  <sub>Building the future of Academic Intelligence for VTU Students</sub>
+</div>
