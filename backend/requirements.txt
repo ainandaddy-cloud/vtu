@@ -1,0 +1,15 @@
+pandas
+python-docx
+openpyxl
+pdfplumber==0.11.9
+pypdf==6.7.1
+pdfminer.six
+pypdfium2
+keras
+tensorflow
+opencv-python
+imutils
+supabase
+python-dotenv
+selenium
+webdriver-manager
