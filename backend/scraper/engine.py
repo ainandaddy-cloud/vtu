@@ -419,7 +419,7 @@ def scrape_all_semesters(usn: str, faculty_id=None):
     found_count = 0
     with sync_playwright() as p:
         browser = p.chromium.launch(
-            headless=False,
+            headless=True,
             args=[
                 "--disable-blink-features=AutomationControlled",
                 "--ignore-certificate-errors",

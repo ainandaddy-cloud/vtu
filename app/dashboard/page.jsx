@@ -8,27 +8,40 @@ import { getGradePoint, unifyGrade } from '../../lib/vtuGrades';
 
 function calcSGPA(subjects) {
     const excludeGrades = ['PP', 'NP', 'W', 'DX', 'AU', 'X', 'NE'];
+    // Only include subjects that are not in the exclude list
     const validSubs = subjects.filter(m => !excludeGrades.includes((m.grade || '').trim().toUpperCase()));
 
-    let pts = 0, backlogs = 0;
+    let totalCredits = 0;
+    let earnedCredits = 0;
+    let totalCreditPoints = 0;
+    let backlogs = 0;
+
     validSubs.forEach(m => {
         const grade = (m.grade || '').trim().toUpperCase();
         const unified = unifyGrade(grade);
-        const computed_pts = getGradePoint(grade, '2022', m.total_marks || m.total, m.see_marks ?? m.external ?? null);
+        const credits = Number(m.credits) || 3;
+        const gp = getGradePoint(grade, '2022', m.total_marks || m.total, m.see_marks ?? m.external ?? null);
 
-        pts += computed_pts;
-        if (unified !== 'P') backlogs++;
+        totalCredits += credits;
+
+        // Sum up weighted grade points (Grade Point * Credits)
+        totalCreditPoints += (gp * credits);
+
+        if (unified === 'P') {
+            earnedCredits += credits;
+        } else {
+            backlogs++;
+        }
     });
 
-    const count = validSubs.length;
-    const sgpa = count > 0 ? (pts / count) : 0;
+    const sgpa = totalCredits > 0 ? (totalCreditPoints / totalCredits) : 0;
 
     return {
         sgpa,
-        totalCredits: 20,
-        earnedCredits: (backlogs === 0 && count > 0) ? 20 : '—',
+        totalCredits,
+        earnedCredits: backlogs === 0 && totalCredits > 0 ? totalCredits : '—', // Keep user display preference: blank if backlogs
         backlogs,
-        gradePoints: sgpa * 20
+        gradePoints: totalCreditPoints
     };
 }
 
