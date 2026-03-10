@@ -423,7 +423,10 @@ def scrape_all_semesters(usn: str, faculty_id=None):
             args=[
                 "--disable-blink-features=AutomationControlled",
                 "--ignore-certificate-errors",
-                "--allow-running-insecure-content"
+                "--allow-running-insecure-content",
+                "--disable-dev-shm-usage",
+                "--no-sandbox",
+                "--disable-gpu"
             ]
         )
         context = browser.new_context(user_agent="Mozilla/5.0")
