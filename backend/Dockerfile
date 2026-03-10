@@ -14,6 +14,9 @@ COPY requirements.txt .
 # Install dependencies before code to cache Docker layers efficiently
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Force Playwright to install the exact browser bins for this version
+RUN playwright install chromium
+RUN playwright install-deps chromium
 # Copy all the backend app files
 COPY . .
 
