@@ -1,6 +1,6 @@
 # Use an official Python image with Chromium/Playwright pre-installed
 # This prevents "browser not found" errors and eliminates 15-minute apt-get build steps
-FROM mcr.microsoft.com/playwright/python:v1.40.0-jammy
+FROM mcr.microsoft.com/playwright/python:v1.58.0-jammy
 
 # Set work directory
 WORKDIR /app
