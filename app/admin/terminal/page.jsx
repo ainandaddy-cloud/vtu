@@ -115,6 +115,28 @@ function AdminPanelContent() {
         }
     };
 
+    const resetStudentCredentials = async () => {
+        if (!selectedStudent) return;
+        const confirmReset = window.confirm(`WARNING: This will reset the password and Recovery PIN for ${selectedStudent.name || selectedStudent.usn}. They will need to 'Activate' their account again. Proceed?`);
+        if (!confirmReset) return;
+
+        try {
+            const { error } = await supabase
+                .from('students')
+                .update({ password_hash: null, recovery_pin: null })
+                .eq('id', selectedStudent.id);
+
+            if (error) throw error;
+
+            alert(`✓ Credentials reset successfully for ${selectedStudent.usn}. They can now re-activate their account.`);
+            await loadData();
+            setSelectedStudent(prev => ({ ...prev, activated_at: null })); // Optionally update UI state directly
+        } catch (err) {
+            console.error('Reset error:', err);
+            alert('❌ Failed to reset credentials.');
+        }
+    };
+
     const copyKey = (key) => {
         navigator.clipboard.writeText(key);
         setCopiedKey(key);
@@ -475,6 +497,12 @@ function AdminPanelContent() {
                                     </div>
                                     <div style={{ fontSize: '11px', color: 'var(--tx-dim)', marginTop: '4px' }}>
                                         Status: <span style={c.badge(selectedStudent.activated_at ? 'active' : 'pending')}>{selectedStudent.activated_at ? 'Activated' : 'Pending'}</span>
+                                    </div>
+                                    <div style={{ marginTop: '12px' }}>
+                                        <button style={{ ...c.actionBtn(false), padding: '6px 12px', fontSize: '10px', borderColor: 'var(--amber)', color: 'var(--amber)', background: 'var(--amber-bg)' }} onClick={resetStudentCredentials}>
+                                            <span className="material-icons-round" style={{ fontSize: '12px', verticalAlign: 'middle', marginRight: '4px' }}>lock_reset</span>
+                                            Reset Password
+                                        </button>
                                     </div>
                                 </div>
                             </div>

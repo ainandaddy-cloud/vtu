@@ -347,29 +347,6 @@ function FacultyDashboardContent() {
     };
 
 
-    const resetStudentCredentials = async () => {
-        if (!student) return;
-        const confirmReset = window.confirm(`WARNING: This will reset the password and Recovery PIN for ${student.name || student.usn}. They will need to 'Activate' their account again. Proceed?`);
-        if (!confirmReset) return;
-
-        setLoading(true);
-        setMessage('Resetting credentials...');
-        try {
-            const { error } = await supabase
-                .from('students')
-                .update({ password_hash: null, recovery_pin: null })
-                .eq('usn', student.usn);
-
-            if (error) throw error;
-
-            setMessage(`✓ Credentials reset successfully for ${student.usn}. They can now re-activate their account.`);
-        } catch (err) {
-            console.error('Reset error:', err);
-            setMessage('❌ Failed to reset credentials.');
-        } finally {
-            setLoading(false);
-        }
-    };
 
     const deleteStudent = async () => {
         if (!student) return;
@@ -551,9 +528,7 @@ function FacultyDashboardContent() {
                                 <button style={{ ...c.searchBtn, padding: '8px 16px', fontSize: '12px', background: 'var(--surface-low)', color: 'var(--tx-main)', border: '1px solid var(--border)' }} onClick={handlePDF}>
                                     Download PDF
                                 </button>
-                                <button style={{ ...c.searchBtn, padding: '8px 16px', fontSize: '12px', background: 'var(--amber-bg)', color: 'var(--amber)', border: '1px solid var(--amber)' }} onClick={resetStudentCredentials}>
-                                    Reset Password
-                                </button>
+
                                 <button style={{ ...c.searchBtn, padding: '8px 16px', fontSize: '12px', background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red)' }} onClick={deleteStudent}>
                                     Wipe Data
                                 </button>
