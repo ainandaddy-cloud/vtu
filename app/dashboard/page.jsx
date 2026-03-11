@@ -555,45 +555,362 @@ function DashboardContent() {
     );
 
     return (
-        <div style={s.page} className="gf-fade-up">
-            <div style={s.eyebrow}>Academic Command Center</div>
-            <h1 className="gf-page-title" style={s.title}>{student?.name && student.name !== student.usn ? `Welcome, ${student.name}` : 'Academic Dashboard'}</h1>
-            <p style={s.subtitle}>
-                {student?.usn || 'USN'} · {student?.branch || 'Branch'} · Scheme {student?.scheme || '2022'}
-            </p>
+        <>
+            <div style={s.page} className="gf-fade-up">
+                <div style={s.eyebrow}>Academic Command Center</div>
+                <h1 className="gf-page-title" style={s.title}>{student?.name && student.name !== student.usn ? `Welcome, ${student.name}` : 'Academic Dashboard'}</h1>
+                <p style={s.subtitle}>
+                    {student?.usn || 'USN'} · {student?.branch || 'Branch'} · Scheme {student?.scheme || '2022'}
+                </p>
 
-            {/* STATS */}
-            <div className="gf-stats-grid" style={{ marginBottom: '32px' }}>
-                <div style={s.statCard}>
-                    <div style={s.statLabel}>Current CGPA</div>
-                    <div className="gf-stat-value" style={{ color: cgpa >= 7.5 ? 'var(--green)' : cgpa >= 5 ? 'var(--tx-main)' : 'var(--amber)' }}>
-                        {cgpa > 0 ? cgpa.toFixed(2) : '—'}
+                {/* STATS */}
+                <div className="gf-stats-grid" style={{ marginBottom: '32px' }}>
+                    <div style={s.statCard}>
+                        <div style={s.statLabel}>Current CGPA</div>
+                        <div className="gf-stat-value" style={{ color: cgpa >= 7.5 ? 'var(--green)' : cgpa >= 5 ? 'var(--tx-main)' : 'var(--amber)' }}>
+                            {cgpa > 0 ? cgpa.toFixed(2) : '—'}
+                        </div>
+                        <div style={s.statSub}>{percentage > 0 ? `${percentage.toFixed(1)}%` : 'N/A'}</div>
                     </div>
-                    <div style={s.statSub}>{percentage > 0 ? `${percentage.toFixed(1)}%` : 'N/A'}</div>
+                    <div style={s.statCard}>
+                        <div style={s.statLabel}>Semesters Tracked</div>
+                        <div className="gf-stat-value">{semesterCount || '—'}</div>
+                    </div>
+                    <div style={s.statCard}>
+                        <div style={s.statLabel}>Subjects Logged</div>
+                        <div className="gf-stat-value">{totalSubjects || '—'}</div>
+                    </div>
+                    <div
+                        style={{ ...s.statCard, cursor: failedSubjects > 0 ? 'pointer' : 'default', transition: 'transform 0.2s' }}
+                        onClick={() => failedSubjects > 0 && setShowBacklogModal(true)}
+                        onMouseOver={(e) => failedSubjects > 0 && (e.currentTarget.style.transform = 'translateY(-4px)')}
+                        onMouseOut={(e) => failedSubjects > 0 && (e.currentTarget.style.transform = 'translateY(0)')}
+                    >
+                        <div style={s.statLabel}>Backlogs</div>
+                        <div className="gf-stat-value" style={{ color: failedSubjects > 0 ? 'var(--red)' : 'var(--green)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {failedSubjects}
+                            {failedSubjects > 0 && <span className="material-icons-round" style={{ fontSize: '20px' }}>arrow_forward</span>}
+                        </div>
+                        <div style={s.statSub}>{failedSubjects === 0 ? 'All Clear ✓' : `${failedSubjects} subject(s)`}</div>
+                    </div>
                 </div>
-                <div style={s.statCard}>
-                    <div style={s.statLabel}>Semesters Tracked</div>
-                    <div className="gf-stat-value">{semesterCount || '—'}</div>
-                </div>
-                <div style={s.statCard}>
-                    <div style={s.statLabel}>Subjects Logged</div>
-                    <div className="gf-stat-value">{totalSubjects || '—'}</div>
-                </div>
+
+                {/* PDF UPLOAD ZONE */}
                 <div
-                    style={{ ...s.statCard, cursor: failedSubjects > 0 ? 'pointer' : 'default', transition: 'transform 0.2s' }}
-                    onClick={() => failedSubjects > 0 && setShowBacklogModal(true)}
-                    onMouseOver={(e) => failedSubjects > 0 && (e.currentTarget.style.transform = 'translateY(-4px)')}
-                    onMouseOut={(e) => failedSubjects > 0 && (e.currentTarget.style.transform = 'translateY(0)')}
+                    style={s.uploadZone}
+                    onClick={() => !pdfLoading && fileInputRef.current?.click()}
+                    onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.background = 'var(--surface)'; }}
+                    onDragLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--surface-low)'; }}
+                    onDrop={(e) => {
+                        e.preventDefault();
+                        e.currentTarget.style.borderColor = 'var(--border)';
+                        e.currentTarget.style.background = 'var(--surface-low)';
+                        if (e.dataTransfer.files?.[0]) {
+                            const dt = new DataTransfer();
+                            dt.items.add(e.dataTransfer.files[0]);
+                            if (fileInputRef.current) {
+                                fileInputRef.current.files = dt.files;
+                                handlePdfUpload({ target: { files: dt.files } });
+                            }
+                        }
+                    }}
                 >
-                    <div style={s.statLabel}>Backlogs</div>
-                    <div className="gf-stat-value" style={{ color: failedSubjects > 0 ? 'var(--red)' : 'var(--green)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        {failedSubjects}
-                        {failedSubjects > 0 && <span className="material-icons-round" style={{ fontSize: '20px' }}>arrow_forward</span>}
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        style={{ display: 'none' }}
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={handlePdfUpload}
+                    />
+                    <span className="material-icons-round" style={{ fontSize: '40px', color: pdfLoading ? 'var(--primary)' : 'var(--tx-dim)', marginBottom: '12px', display: 'block' }}>
+                        {pdfLoading ? 'sync' : 'upload_file'}
+                    </span>
+                    <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--tx-main)', marginBottom: '6px' }}>
+                        {pdfLoading ? 'Processing your file...' : 'Upload VTU Result PDF or Image'}
                     </div>
-                    <div style={s.statSub}>{failedSubjects === 0 ? 'All Clear ✓' : `${failedSubjects} subject(s)`}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--tx-muted)', lineHeight: 1.5 }}>
+                        Drag & drop your VTU result PDF or Image (Screenshot) here, or click to browse.<br />
+                        <span style={{ fontWeight: 700, color: 'var(--tx-dim)' }}>Supports official VTU Grade Cards · Max 30MB · Only YOUR results are accepted</span>
+                    </div>
                 </div>
-            </div>
 
+                {/* Messages */}
+                {pdfMsg && (
+                    <div style={s.msgBox(pdfMsg.startsWith('ℹ️') ? 'info' : 'success')}>
+                        {pdfMsg}
+                    </div>
+                )}
+                {pdfError && (
+                    <div style={s.msgBox('error')}>
+                        {pdfError}
+                    </div>
+                )}
+
+                {/* ACTION BUTTONS */}
+                <div className="gf-actions" style={{ marginBottom: '32px' }}>
+                    <button style={s.btn(false)} onClick={() => router.push('/calculator')}>
+                        <span className="material-icons-round" style={{ fontSize: '18px' }}>edit_note</span>
+                        Enter Marks Manually
+                    </button>
+                    {totalSubjects > 0 && (
+                        <button style={s.btn(false)} onClick={downloadPDF} disabled={pdfLoading}>
+                            <span className="material-icons-round" style={{ fontSize: '18px' }}>picture_as_pdf</span>
+                            {pdfLoading ? 'Generating...' : 'Download PDF Transcript'}
+                        </button>
+                    )}
+                </div>
+
+                {/* SEMESTER RESULTS */}
+                {semesterCount > 0 ? (
+                    <>
+                        {/* CGPA Summary Bar */}
+                        <div className="gf-result-bar" style={{ marginBottom: '32px' }}>
+                            <div>
+                                <div style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '4px', opacity: 0.6 }}>Overall CGPA</div>
+                                <div style={{ fontSize: 'clamp(32px, 6vw, 48px)', fontWeight: 900, letterSpacing: '-0.04em' }}>{cgpa.toFixed(2)}</div>
+                                <div style={{ fontSize: '12px', fontWeight: 600, opacity: 0.5, marginTop: '4px' }}>
+                                    {percentage > 0 ? `${percentage.toFixed(1)}%` : ''} · {cgpa >= 7.75 ? 'First Class Distinction' : cgpa >= 6.75 ? 'First Class' : cgpa > 0 ? 'Pass' : ''}
+                                </div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontSize: '11px', fontWeight: 700, opacity: 0.6, marginBottom: '8px' }}>
+                                    {semesterCount} Semester{semesterCount > 1 ? 's' : ''} · {totalSubjects} Subjects
+                                </div>
+                                {/* Per-semester SGPA summary */}
+                                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                    {sortedSemesters.map(([sem]) => (
+                                        <div key={sem} style={{
+                                            fontSize: '10px', fontWeight: 800,
+                                            background: 'rgba(255,255,255,0.1)', padding: '3px 8px',
+                                            borderRadius: '6px',
+                                        }}>
+                                            S{sem}: {(sgpas[sem] || 0).toFixed(2)}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* SEMESTER PERFORMANCE SUMMARY TABLE */}
+                        <div style={{ ...s.semCard, padding: '24px', marginBottom: '32px' }}>
+                            <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--tx-dim)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '24px' }}>Semester-Wise Performance</div>
+                            <div className="gf-table-wrap" style={{ border: 'none', borderRadius: 0 }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                    <thead>
+                                        <tr>
+                                            <th style={s.th}>Semester</th>
+                                            <th style={{ ...s.th, textAlign: 'center' }}>SGPA</th>
+                                            <th style={{ ...s.th, textAlign: 'center' }}>Credits (Earned)</th>
+                                            <th style={{ ...s.th, textAlign: 'center' }}>Grade Points</th>
+                                            <th style={{ ...s.th, textAlign: 'center' }}>Backlogs</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {sortedSemesters.map(([sem]) => {
+                                            const stat = semStats[sem] || { sgpa: 0, earnedCredits: 0, gradePoints: 0, backlogs: 0 };
+                                            return (
+                                                <tr key={sem}>
+                                                    <td style={{ ...s.td, fontWeight: 800 }}>Semester {sem}</td>
+                                                    <td style={{ ...s.td, textAlign: 'center', fontWeight: 900, color: 'var(--primary)' }}>{stat.sgpa.toFixed(2)}</td>
+                                                    <td style={{ ...s.td, textAlign: 'center' }}>{stat.earnedCredits}</td>
+                                                    <td style={{ ...s.td, textAlign: 'center' }}>{stat.gradePoints.toFixed(2)}</td>
+                                                    <td style={{ ...s.td, textAlign: 'center' }}>
+                                                        <span style={{
+                                                            color: stat.backlogs > 0 ? 'var(--red)' : 'var(--green)',
+                                                            fontWeight: 900,
+                                                            background: stat.backlogs > 0 ? 'var(--red-bg)' : 'var(--green-bg)',
+                                                            padding: '4px 10px',
+                                                            borderRadius: '8px',
+                                                            fontSize: '11px'
+                                                        }}>
+                                                            {stat.backlogs === 0 ? 'Clear ✓' : stat.backlogs}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        {sortedSemesters.map(([sem, subjects]) => (
+                            <div key={sem} style={s.semCard}>
+                                <div style={s.semHead}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                            <div style={s.semTitle}>Semester {sem}</div>
+                                            <div style={{ fontSize: '11px', color: 'var(--tx-dim)', fontWeight: 600, marginTop: '2px' }}>
+                                                {subjects.length} Subjects Listed
+                                            </div>
+                                        </div>
+                                        <div style={s.sgpaBadge}>
+                                            SGPA: {(sgpas[sem] || 0).toFixed(2)}
+                                        </div>
+                                    </div>
+                                    <button
+                                        style={{ padding: '6px 12px', fontSize: '11px', fontWeight: 800, background: 'var(--surface-low)', color: 'var(--tx-main)', border: '1px solid var(--border)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                        onClick={() => {
+                                            import('../../lib/generatePDF').then(({ generateResultPDF }) => {
+                                                generateResultPDF({
+                                                    studentName: student.name || 'Student',
+                                                    usn: student.usn || 'N/A',
+                                                    branch: student.branch || '',
+                                                    scheme: student.scheme || '2022',
+                                                    semesterMarks: { [sem]: subjects },
+                                                    cgpa: sgpas[sem] // Pass SGPA of the semester as a placeholder
+                                                });
+                                            }).catch(err => alert('PDF Import Error: ' + err.message));
+                                        }}
+                                    >
+                                        <span className="material-icons-round" style={{ fontSize: '14px' }}>download</span>
+                                        Sem {sem} PDF
+                                    </button>
+                                </div>
+                                <div className="gf-table-wrap" style={{ border: 'none', borderRadius: 0, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
+                                        <thead>
+                                            <tr>
+                                                <th style={s.th}>Subject Code</th>
+                                                <th style={s.th}>Subject Name</th>
+                                                <th style={{ ...s.th, textAlign: 'center' }}>Internal Marks</th>
+                                                <th style={{ ...s.th, textAlign: 'center' }}>External Marks</th>
+                                                <th style={{ ...s.th, textAlign: 'center' }}>Total</th>
+                                                <th style={{ ...s.th, textAlign: 'center' }}>Result</th>
+                                                <th style={s.th}>Announced / Updated on</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {subjects.map((m, idx) => (
+                                                <tr key={m.id || idx}>
+                                                    <td style={{ ...s.td, fontFamily: 'monospace', fontWeight: 800, color: 'var(--tx-main)' }}>
+                                                        {m.subject_code || m.code || '—'}
+                                                    </td>
+                                                    <td style={s.td}>
+                                                        <div style={{ fontWeight: 800 }}>{m.subject_name || m.name || 'Unknown'}</div>
+                                                    </td>
+                                                    <td style={{ ...s.td, textAlign: 'center' }}>{m.cie_marks ?? m.internal ?? '—'}</td>
+                                                    <td style={{ ...s.td, textAlign: 'center' }}>{m.see_marks ?? m.external ?? '—'}</td>
+                                                    <td style={{ ...s.td, textAlign: 'center', fontWeight: 900 }}>{m.total_marks ?? m.total ?? '—'}</td>
+                                                    <td style={{ ...s.td, textAlign: 'center' }}>
+                                                        <span style={s.gradePill(m.grade)}>{unifyGrade(m.grade)}</span>
+                                                    </td>
+                                                    <td style={{ ...s.td, fontSize: '11px', fontWeight: 600, color: 'var(--tx-muted)', whiteSpace: 'nowrap' }}>
+                                                        {m.announced_date || m.exam_date || 'N/A'}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                {/* BACKLOG ATTEMPTS HISTORY FOR THIS SEMESTER */}
+                                {student?.history?.[sem] && student.history[sem].length > 0 && (
+                                    <div style={{ padding: '16px', background: 'var(--surface-low)', borderTop: '1px solid var(--border)' }}>
+                                        <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--tx-dim)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+                                            <span className="material-icons-round" style={{ fontSize: '14px', verticalAlign: 'middle', marginRight: '4px' }}>history</span>
+                                            Previous / Backlog Attempts
+                                        </div>
+                                        <div style={{ display: 'grid', gap: '8px' }}>
+                                            {student.history[sem].map((hm, hidx) => (
+                                                <div key={`hist-${hm.id || hidx}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface)', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                        <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--tx-main)' }}>
+                                                            {hm.subject_name || hm.name} <span style={{ fontFamily: 'monospace', color: 'var(--tx-muted)', marginLeft: '4px' }}>({hm.subject_code || hm.code})</span>
+                                                        </div>
+                                                        <div style={{ fontSize: '10px', color: 'var(--tx-dim)', marginTop: '2px', fontWeight: 600 }}>
+                                                            {hm.exam_date}
+                                                        </div>
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: '16px', alignItems: 'center', fontSize: '12px' }}>
+                                                        <span style={{ color: 'var(--tx-dim)' }}>Total: <b style={{ color: 'var(--tx-main)' }}>{hm.total_marks ?? hm.total ?? '—'}</b></span>
+                                                        <span style={s.gradePill(hm.grade, 'small')}>{unifyGrade(hm.grade)}</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+
+                        {/* ── BACKLOG ANALYSIS PANEL ── */}
+                        {failedSubjects > 0 && (
+                            <div style={{
+                                background: 'var(--surface)', border: '1px solid var(--red)',
+                                borderRadius: '20px', padding: 'clamp(20px, 3vw, 32px)', marginTop: '32px',
+                                borderLeftWidth: '4px',
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+                                    <div style={{
+                                        width: '40px', height: '40px', borderRadius: '12px',
+                                        background: 'var(--red-bg)', display: 'flex', alignItems: 'center',
+                                        justifyContent: 'center', flexShrink: 0,
+                                    }}>
+                                        <span className="material-icons-round" style={{ fontSize: '20px', color: 'var(--red)' }}>warning</span>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '16px', fontWeight: 900, color: 'var(--tx-main)' }}>
+                                            Backlog Analysis — {failedSubjects} Subject{failedSubjects > 1 ? 's' : ''} Pending
+                                        </div>
+                                        <div style={{ fontSize: '12px', color: 'var(--tx-muted)', fontWeight: 600, marginTop: '2px' }}>
+                                            These subjects require re-examination to clear your academic record.
+                                        </div>
+                                    </div>
+                                </div>
+                                <div style={{ display: 'grid', gap: '10px' }}>
+                                    {Object.entries(marks).flatMap(([sem, subjects]) =>
+                                        subjects
+                                            .filter(m => { const g = unifyGrade(m.grade); return g === 'F' || g === 'A'; })
+                                            .map((m, idx) => (
+                                                <div key={`backlog-${sem}-${idx}`} style={{
+                                                    display: 'flex', alignItems: 'center', gap: '16px',
+                                                    padding: '14px 18px', background: 'var(--red-bg)',
+                                                    borderRadius: '12px', flexWrap: 'wrap',
+                                                }}>
+                                                    <span style={{
+                                                        fontSize: '10px', fontWeight: 900, color: 'var(--red)',
+                                                        background: 'rgba(220, 38, 38, 0.15)', padding: '4px 10px',
+                                                        borderRadius: '6px', whiteSpace: 'nowrap',
+                                                    }}>
+                                                        SEM {sem}
+                                                    </span>
+                                                    <div style={{ flex: 1, minWidth: '150px' }}>
+                                                        <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--tx-main)' }}>
+                                                            {m.subject_name || m.name || 'Unknown'}
+                                                        </div>
+                                                        <div style={{ fontSize: '10px', fontFamily: 'monospace', color: 'var(--tx-dim)', marginTop: '2px' }}>
+                                                            {m.subject_code || m.code || ''}
+                                                        </div>
+                                                    </div>
+                                                    <span style={s.gradePill(m.grade)}>{unifyGrade(m.grade)}</span>
+                                                </div>
+                                            ))
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </>
+                ) : (
+                    <div style={s.empty}>
+                        <span className="material-icons-round" style={{ fontSize: '48px', color: 'var(--border)', marginBottom: '20px', display: 'block' }}>school</span>
+                        <h3 style={{ fontSize: '20px', fontWeight: 900, color: 'var(--tx-main)', marginBottom: '12px' }}>No Academic Records Yet</h3>
+                        <p style={{ color: 'var(--tx-muted)', maxWidth: '400px', margin: '0 auto', lineHeight: 1.6, marginBottom: '32px' }}>
+                            Upload your VTU result PDF above or enter marks manually to get started.
+                        </p>
+                        <div className="gf-actions" style={{ justifyContent: 'center' }}>
+                            <button style={s.btn(true)} onClick={() => fileInputRef.current?.click()}>
+                                <span className="material-icons-round" style={{ fontSize: '18px' }}>upload_file</span>
+                                Upload Result PDF
+                            </button>
+                            <button style={s.btn(false)} onClick={() => router.push('/calculator')}>
+                                <span className="material-icons-round" style={{ fontSize: '18px' }}>edit_note</span>
+                                Manual Entry
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
             {showBacklogModal && (
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(10px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
                     <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '24px', width: '100%', maxWidth: '600px', maxHeight: '80vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }} className="gf-fade-up">
@@ -624,323 +941,7 @@ function DashboardContent() {
                     </div>
                 </div>
             )}
-
-            {/* PDF UPLOAD ZONE */}
-            <div
-                style={s.uploadZone}
-                onClick={() => !pdfLoading && fileInputRef.current?.click()}
-                onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.background = 'var(--surface)'; }}
-                onDragLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--surface-low)'; }}
-                onDrop={(e) => {
-                    e.preventDefault();
-                    e.currentTarget.style.borderColor = 'var(--border)';
-                    e.currentTarget.style.background = 'var(--surface-low)';
-                    if (e.dataTransfer.files?.[0]) {
-                        const dt = new DataTransfer();
-                        dt.items.add(e.dataTransfer.files[0]);
-                        if (fileInputRef.current) {
-                            fileInputRef.current.files = dt.files;
-                            handlePdfUpload({ target: { files: dt.files } });
-                        }
-                    }
-                }}
-            >
-                <input
-                    type="file"
-                    ref={fileInputRef}
-                    style={{ display: 'none' }}
-                    accept=".pdf,.jpg,.jpeg,.png"
-                    onChange={handlePdfUpload}
-                />
-                <span className="material-icons-round" style={{ fontSize: '40px', color: pdfLoading ? 'var(--primary)' : 'var(--tx-dim)', marginBottom: '12px', display: 'block' }}>
-                    {pdfLoading ? 'sync' : 'upload_file'}
-                </span>
-                <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--tx-main)', marginBottom: '6px' }}>
-                    {pdfLoading ? 'Processing your file...' : 'Upload VTU Result PDF or Image'}
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--tx-muted)', lineHeight: 1.5 }}>
-                    Drag & drop your VTU result PDF or Image (Screenshot) here, or click to browse.<br />
-                    <span style={{ fontWeight: 700, color: 'var(--tx-dim)' }}>Supports official VTU Grade Cards · Max 30MB · Only YOUR results are accepted</span>
-                </div>
-            </div>
-
-            {/* Messages */}
-            {pdfMsg && (
-                <div style={s.msgBox(pdfMsg.startsWith('ℹ️') ? 'info' : 'success')}>
-                    {pdfMsg}
-                </div>
-            )}
-            {pdfError && (
-                <div style={s.msgBox('error')}>
-                    {pdfError}
-                </div>
-            )}
-
-            {/* ACTION BUTTONS */}
-            <div className="gf-actions" style={{ marginBottom: '32px' }}>
-                <button style={s.btn(false)} onClick={() => router.push('/calculator')}>
-                    <span className="material-icons-round" style={{ fontSize: '18px' }}>edit_note</span>
-                    Enter Marks Manually
-                </button>
-                {totalSubjects > 0 && (
-                    <button style={s.btn(false)} onClick={downloadPDF} disabled={pdfLoading}>
-                        <span className="material-icons-round" style={{ fontSize: '18px' }}>picture_as_pdf</span>
-                        {pdfLoading ? 'Generating...' : 'Download PDF Transcript'}
-                    </button>
-                )}
-            </div>
-
-            {/* SEMESTER RESULTS */}
-            {semesterCount > 0 ? (
-                <>
-                    {/* CGPA Summary Bar */}
-                    <div className="gf-result-bar" style={{ marginBottom: '32px' }}>
-                        <div>
-                            <div style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '4px', opacity: 0.6 }}>Overall CGPA</div>
-                            <div style={{ fontSize: 'clamp(32px, 6vw, 48px)', fontWeight: 900, letterSpacing: '-0.04em' }}>{cgpa.toFixed(2)}</div>
-                            <div style={{ fontSize: '12px', fontWeight: 600, opacity: 0.5, marginTop: '4px' }}>
-                                {percentage > 0 ? `${percentage.toFixed(1)}%` : ''} · {cgpa >= 7.75 ? 'First Class Distinction' : cgpa >= 6.75 ? 'First Class' : cgpa > 0 ? 'Pass' : ''}
-                            </div>
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: '11px', fontWeight: 700, opacity: 0.6, marginBottom: '8px' }}>
-                                {semesterCount} Semester{semesterCount > 1 ? 's' : ''} · {totalSubjects} Subjects
-                            </div>
-                            {/* Per-semester SGPA summary */}
-                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                                {sortedSemesters.map(([sem]) => (
-                                    <div key={sem} style={{
-                                        fontSize: '10px', fontWeight: 800,
-                                        background: 'rgba(255,255,255,0.1)', padding: '3px 8px',
-                                        borderRadius: '6px',
-                                    }}>
-                                        S{sem}: {(sgpas[sem] || 0).toFixed(2)}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* SEMESTER PERFORMANCE SUMMARY TABLE */}
-                    <div style={{ ...s.semCard, padding: '24px', marginBottom: '32px' }}>
-                        <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--tx-dim)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '24px' }}>Semester-Wise Performance</div>
-                        <div className="gf-table-wrap" style={{ border: 'none', borderRadius: 0 }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                <thead>
-                                    <tr>
-                                        <th style={s.th}>Semester</th>
-                                        <th style={{ ...s.th, textAlign: 'center' }}>SGPA</th>
-                                        <th style={{ ...s.th, textAlign: 'center' }}>Credits (Earned)</th>
-                                        <th style={{ ...s.th, textAlign: 'center' }}>Grade Points</th>
-                                        <th style={{ ...s.th, textAlign: 'center' }}>Backlogs</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {sortedSemesters.map(([sem]) => {
-                                        const stat = semStats[sem] || { sgpa: 0, earnedCredits: 0, gradePoints: 0, backlogs: 0 };
-                                        return (
-                                            <tr key={sem}>
-                                                <td style={{ ...s.td, fontWeight: 800 }}>Semester {sem}</td>
-                                                <td style={{ ...s.td, textAlign: 'center', fontWeight: 900, color: 'var(--primary)' }}>{stat.sgpa.toFixed(2)}</td>
-                                                <td style={{ ...s.td, textAlign: 'center' }}>{stat.earnedCredits}</td>
-                                                <td style={{ ...s.td, textAlign: 'center' }}>{stat.gradePoints.toFixed(2)}</td>
-                                                <td style={{ ...s.td, textAlign: 'center' }}>
-                                                    <span style={{
-                                                        color: stat.backlogs > 0 ? 'var(--red)' : 'var(--green)',
-                                                        fontWeight: 900,
-                                                        background: stat.backlogs > 0 ? 'var(--red-bg)' : 'var(--green-bg)',
-                                                        padding: '4px 10px',
-                                                        borderRadius: '8px',
-                                                        fontSize: '11px'
-                                                    }}>
-                                                        {stat.backlogs === 0 ? 'Clear ✓' : stat.backlogs}
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    {sortedSemesters.map(([sem, subjects]) => (
-                        <div key={sem} style={s.semCard}>
-                            <div style={s.semHead}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                        <div style={s.semTitle}>Semester {sem}</div>
-                                        <div style={{ fontSize: '11px', color: 'var(--tx-dim)', fontWeight: 600, marginTop: '2px' }}>
-                                            {subjects.length} Subjects Listed
-                                        </div>
-                                    </div>
-                                    <div style={s.sgpaBadge}>
-                                        SGPA: {(sgpas[sem] || 0).toFixed(2)}
-                                    </div>
-                                </div>
-                                <button
-                                    style={{ padding: '6px 12px', fontSize: '11px', fontWeight: 800, background: 'var(--surface-low)', color: 'var(--tx-main)', border: '1px solid var(--border)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                                    onClick={() => {
-                                        import('../../lib/generatePDF').then(({ generateResultPDF }) => {
-                                            generateResultPDF({
-                                                studentName: student.name || 'Student',
-                                                usn: student.usn || 'N/A',
-                                                branch: student.branch || '',
-                                                scheme: student.scheme || '2022',
-                                                semesterMarks: { [sem]: subjects },
-                                                cgpa: sgpas[sem] // Pass SGPA of the semester as a placeholder
-                                            });
-                                        }).catch(err => alert('PDF Import Error: ' + err.message));
-                                    }}
-                                >
-                                    <span className="material-icons-round" style={{ fontSize: '14px' }}>download</span>
-                                    Sem {sem} PDF
-                                </button>
-                            </div>
-                            <div className="gf-table-wrap" style={{ border: 'none', borderRadius: 0, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
-                                    <thead>
-                                        <tr>
-                                            <th style={s.th}>Subject Code</th>
-                                            <th style={s.th}>Subject Name</th>
-                                            <th style={{ ...s.th, textAlign: 'center' }}>Internal Marks</th>
-                                            <th style={{ ...s.th, textAlign: 'center' }}>External Marks</th>
-                                            <th style={{ ...s.th, textAlign: 'center' }}>Total</th>
-                                            <th style={{ ...s.th, textAlign: 'center' }}>Result</th>
-                                            <th style={s.th}>Announced / Updated on</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {subjects.map((m, idx) => (
-                                            <tr key={m.id || idx}>
-                                                <td style={{ ...s.td, fontFamily: 'monospace', fontWeight: 800, color: 'var(--tx-main)' }}>
-                                                    {m.subject_code || m.code || '—'}
-                                                </td>
-                                                <td style={s.td}>
-                                                    <div style={{ fontWeight: 800 }}>{m.subject_name || m.name || 'Unknown'}</div>
-                                                </td>
-                                                <td style={{ ...s.td, textAlign: 'center' }}>{m.cie_marks ?? m.internal ?? '—'}</td>
-                                                <td style={{ ...s.td, textAlign: 'center' }}>{m.see_marks ?? m.external ?? '—'}</td>
-                                                <td style={{ ...s.td, textAlign: 'center', fontWeight: 900 }}>{m.total_marks ?? m.total ?? '—'}</td>
-                                                <td style={{ ...s.td, textAlign: 'center' }}>
-                                                    <span style={s.gradePill(m.grade)}>{unifyGrade(m.grade)}</span>
-                                                </td>
-                                                <td style={{ ...s.td, fontSize: '11px', fontWeight: 600, color: 'var(--tx-muted)', whiteSpace: 'nowrap' }}>
-                                                    {m.announced_date || m.exam_date || 'N/A'}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            {/* BACKLOG ATTEMPTS HISTORY FOR THIS SEMESTER */}
-                            {student?.history?.[sem] && student.history[sem].length > 0 && (
-                                <div style={{ padding: '16px', background: 'var(--surface-low)', borderTop: '1px solid var(--border)' }}>
-                                    <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--tx-dim)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
-                                        <span className="material-icons-round" style={{ fontSize: '14px', verticalAlign: 'middle', marginRight: '4px' }}>history</span>
-                                        Previous / Backlog Attempts
-                                    </div>
-                                    <div style={{ display: 'grid', gap: '8px' }}>
-                                        {student.history[sem].map((hm, hidx) => (
-                                            <div key={`hist-${hm.id || hidx}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface)', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border)' }}>
-                                                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--tx-main)' }}>
-                                                        {hm.subject_name || hm.name} <span style={{ fontFamily: 'monospace', color: 'var(--tx-muted)', marginLeft: '4px' }}>({hm.subject_code || hm.code})</span>
-                                                    </div>
-                                                    <div style={{ fontSize: '10px', color: 'var(--tx-dim)', marginTop: '2px', fontWeight: 600 }}>
-                                                        {hm.exam_date}
-                                                    </div>
-                                                </div>
-                                                <div style={{ display: 'flex', gap: '16px', alignItems: 'center', fontSize: '12px' }}>
-                                                    <span style={{ color: 'var(--tx-dim)' }}>Total: <b style={{ color: 'var(--tx-main)' }}>{hm.total_marks ?? hm.total ?? '—'}</b></span>
-                                                    <span style={s.gradePill(hm.grade, 'small')}>{unifyGrade(hm.grade)}</span>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    ))}
-
-                    {/* ── BACKLOG ANALYSIS PANEL ── */}
-                    {failedSubjects > 0 && (
-                        <div style={{
-                            background: 'var(--surface)', border: '1px solid var(--red)',
-                            borderRadius: '20px', padding: 'clamp(20px, 3vw, 32px)', marginTop: '32px',
-                            borderLeftWidth: '4px',
-                        }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-                                <div style={{
-                                    width: '40px', height: '40px', borderRadius: '12px',
-                                    background: 'var(--red-bg)', display: 'flex', alignItems: 'center',
-                                    justifyContent: 'center', flexShrink: 0,
-                                }}>
-                                    <span className="material-icons-round" style={{ fontSize: '20px', color: 'var(--red)' }}>warning</span>
-                                </div>
-                                <div>
-                                    <div style={{ fontSize: '16px', fontWeight: 900, color: 'var(--tx-main)' }}>
-                                        Backlog Analysis — {failedSubjects} Subject{failedSubjects > 1 ? 's' : ''} Pending
-                                    </div>
-                                    <div style={{ fontSize: '12px', color: 'var(--tx-muted)', fontWeight: 600, marginTop: '2px' }}>
-                                        These subjects require re-examination to clear your academic record.
-                                    </div>
-                                </div>
-                            </div>
-                            <div style={{ display: 'grid', gap: '10px' }}>
-                                {Object.entries(marks).flatMap(([sem, subjects]) =>
-                                    subjects
-                                        .filter(m => { const g = unifyGrade(m.grade); return g === 'F' || g === 'A'; })
-                                        .map((m, idx) => (
-                                            <div key={`backlog-${sem}-${idx}`} style={{
-                                                display: 'flex', alignItems: 'center', gap: '16px',
-                                                padding: '14px 18px', background: 'var(--red-bg)',
-                                                borderRadius: '12px', flexWrap: 'wrap',
-                                            }}>
-                                                <span style={{
-                                                    fontSize: '10px', fontWeight: 900, color: 'var(--red)',
-                                                    background: 'rgba(220, 38, 38, 0.15)', padding: '4px 10px',
-                                                    borderRadius: '6px', whiteSpace: 'nowrap',
-                                                }}>
-                                                    SEM {sem}
-                                                </span>
-                                                <div style={{ flex: 1, minWidth: '150px' }}>
-                                                    <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--tx-main)' }}>
-                                                        {m.subject_name || m.name || 'Unknown'}
-                                                    </div>
-                                                    <div style={{ fontSize: '10px', fontFamily: 'monospace', color: 'var(--tx-dim)', marginTop: '2px' }}>
-                                                        {m.subject_code || m.code || ''}
-                                                    </div>
-                                                </div>
-                                                <span style={s.gradePill(m.grade)}>{unifyGrade(m.grade)}</span>
-                                            </div>
-                                        ))
-                                )}
-                            </div>
-                        </div>
-                    )}
-                </>
-            ) : (
-                <div style={s.empty}>
-                    <span className="material-icons-round" style={{ fontSize: '48px', color: 'var(--border)', marginBottom: '20px', display: 'block' }}>school</span>
-                    <h3 style={{ fontSize: '20px', fontWeight: 900, color: 'var(--tx-main)', marginBottom: '12px' }}>No Academic Records Yet</h3>
-                    <p style={{ color: 'var(--tx-muted)', maxWidth: '400px', margin: '0 auto', lineHeight: 1.6, marginBottom: '32px' }}>
-                        Upload your VTU result PDF above or enter marks manually to get started.
-                    </p>
-                    <div className="gf-actions" style={{ justifyContent: 'center' }}>
-                        <button style={s.btn(true)} onClick={() => fileInputRef.current?.click()}>
-                            <span className="material-icons-round" style={{ fontSize: '18px' }}>upload_file</span>
-                            Upload Result PDF
-                        </button>
-                        <button style={s.btn(false)} onClick={() => router.push('/calculator')}>
-                            <span className="material-icons-round" style={{ fontSize: '18px' }}>edit_note</span>
-                            Manual Entry
-                        </button>
-                    </div>
-                </div>
-            )}
-        </div>
+        </>
     );
 }
 

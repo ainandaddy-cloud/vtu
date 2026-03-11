@@ -17,6 +17,7 @@ function SettingsContent() {
     const [editBranch, setEditBranch] = useState('');
     const [editEmail, setEditEmail] = useState('');
     const [editPhone, setEditPhone] = useState('');
+    const [recoveryPin, setRecoveryPin] = useState('');
     const fileRef = useRef(null);
     const router = useRouter();
 
@@ -53,6 +54,7 @@ function SettingsContent() {
                 setEditBranch(data.branch || '');
                 setEditEmail(data.email || '');
                 setEditPhone(data.phone || '');
+                setRecoveryPin(data.recovery_pin || '');
             }
         } catch (e) {
             console.error('Profile fetch error:', e);
@@ -339,17 +341,29 @@ function SettingsContent() {
                         {userType === 'student' ? (session?.usn || 'Not signed in') : 'Faculty'}
                     </span>
                 </div>
-                <div style={st.row}>
+                <div style={{ ...st.row, borderBottom: 'none' }}>
                     <span style={st.rowLabel}>Status</span>
                     <span style={{ ...st.rowVal, color: session ? '#059669' : '#d97706' }}>
                         {session ? 'Active' : 'Inactive'}
                     </span>
                 </div>
-                <div style={{ ...st.row, borderBottom: 'none' }}>
-                    <span style={st.rowLabel}>Portal</span>
-                    <span style={st.rowVal}>{userType === 'student' ? 'Student Portal' : 'Faculty Portal'}</span>
-                </div>
             </div>
+
+            {/* Recovery PIN Alert (Student Only) */}
+            {userType === 'student' && recoveryPin && (
+                <div style={{ ...st.card, border: '1px solid var(--amber)', background: 'var(--amber-bg)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                        <span className="material-icons-round" style={{ color: 'var(--amber)', fontSize: '24px' }}>vpn_key</span>
+                        <div style={{ ...st.cardTitle, marginBottom: 0, color: 'var(--amber)' }}>Recovery PIN</div>
+                    </div>
+                    <p style={{ fontSize: '13px', color: 'var(--tx-main)', fontWeight: 600, lineHeight: 1.5, marginBottom: '20px' }}>
+                        This is your unique Recovery PIN. Please take a screenshot or write it down. You will need it to reset your password if you ever forget it.
+                    </p>
+                    <div style={{ background: 'var(--bg)', padding: '16px', borderRadius: '12px', textAlign: 'center', fontSize: '32px', fontWeight: 900, letterSpacing: '0.2em', color: 'var(--tx-main)', border: '2px dashed var(--amber)' }}>
+                        {recoveryPin}
+                    </div>
+                </div>
+            )}
 
             {/* Logout */}
             <div style={st.card}>

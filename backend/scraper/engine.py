@@ -181,12 +181,13 @@ def _parse_row(texts):
     }
 
 def _check_url(page, url: str, usn: str, dialog_log: list, max_retries: int = 50) -> dict | None:
-    url_short = url.split("/")[-2]
+    url_short = url.split("/")[-2] if "/" in url else url
+    print(f"    [>] Checking {url_short}...", file=sys.stderr, flush=True)
     
     try:
-        page.goto(url, wait_until="load", timeout=45000)
+        page.goto(url, wait_until="load", timeout=25000)
     except Exception as e:
-        print(f"    [!] Failed to load {url_short}: {e}", file=sys.stderr)
+        print(f"    [!] Failed to load {url_short}: Time out or error.", file=sys.stderr, flush=True)
         return None
 
     for attempt in range(max_retries):
@@ -414,10 +415,11 @@ def scrape_all_semesters(usn: str, faculty_id=None):
         return False
         
     usn = usn.strip().upper()
-    print(f"\n[ENGINE] Scraping {usn} ({len(urls)} portals)...", file=sys.stderr)
+    print(f"\n[ENGINE] Scraping {usn} ({len(urls)} portals)...", file=sys.stderr, flush=True)
     
     found_count = 0
     with sync_playwright() as p:
+        print(f"[ENGINE] Launching Playwright browser instance...", file=sys.stderr, flush=True)
         browser = p.chromium.launch(
             headless=True,
             args=[

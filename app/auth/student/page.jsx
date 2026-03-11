@@ -7,10 +7,12 @@ import Link from 'next/link';
 
 export default function StudentAuth() {
     const router = useRouter();
-    const [mode, setMode] = useState('login'); // 'login' | 'activate'
+    const [mode, setMode] = useState('login'); // 'login' | 'activate' | 'forgot' | 'show_pin'
     const [usn, setUsn] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
+    const [pin, setPin] = useState('');
+    const [authGeneratedPin, setAuthGeneratedPin] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
@@ -121,10 +123,12 @@ export default function StudentAuth() {
                     return;
                 }
 
+                const generatedPin = Math.floor(1000 + Math.random() * 9000).toString();
                 const { error: upErr } = await supabase
                     .from('students')
                     .update({
                         password_hash: passwordHash,
+                        recovery_pin: generatedPin,
                         activated_at: new Date().toISOString(),
                         updated_at: new Date().toISOString(),
                     })
@@ -132,7 +136,7 @@ export default function StudentAuth() {
 
                 if (upErr) throw upErr;
 
-                // Auto-login and redirect — student immediately sees pre-loaded data
+                // Auto-login and show pin
                 const { data: freshProfile } = await supabase
                     .from('students')
                     .select('*')
@@ -151,19 +155,9 @@ export default function StudentAuth() {
                     sessionData.signature = await hash(freshProfile.usn + freshProfile.id);
                     localStorage.setItem('student_session', JSON.stringify(sessionData));
 
-                    // Check if faculty already loaded results for this USN
-                    const { count } = await supabase
-                        .from('subject_marks')
-                        .select('id', { count: 'exact', head: true })
-                        .eq('usn', cleanUSN);
-
-                    if (count && count > 0) {
-                        setSuccess(`✅ Account activated! Found ${count} subject records already loaded. Redirecting...`);
-                    } else {
-                        setSuccess('✅ Account activated! Redirecting to your dashboard...');
-                    }
-
-                    setTimeout(() => router.push('/dashboard'), 1500);
+                    setAuthGeneratedPin(generatedPin);
+                    setSuccess('✅ Account activated!');
+                    setMode('show_pin');
                     return;
                 }
 
@@ -180,12 +174,14 @@ export default function StudentAuth() {
                 if (detectedBranch === 'EC') detectedBranch = 'ECE';
                 if (detectedBranch === 'ME') detectedBranch = 'MECH';
 
+                const generatedPin = Math.floor(1000 + Math.random() * 9000).toString();
                 const { data: newProfile, error: insertErr } = await supabase
                     .from('students')
                     .insert({
                         usn: cleanUSN,
                         name: cleanUSN,
                         password_hash: passwordHash,
+                        recovery_pin: generatedPin,
                         activated_at: new Date().toISOString(),
                         scheme: '2022',
                         branch: detectedBranch || null,
@@ -195,7 +191,6 @@ export default function StudentAuth() {
 
                 if (insertErr) throw insertErr;
 
-                // Auto-login and redirect for new profiles too
                 if (newProfile) {
                     localStorage.removeItem('faculty_session');
                     const sessionData = {
@@ -207,8 +202,10 @@ export default function StudentAuth() {
                     };
                     sessionData.signature = await hash(newProfile.usn + newProfile.id);
                     localStorage.setItem('student_session', JSON.stringify(sessionData));
-                    setSuccess('✅ Account created! Redirecting to your dashboard...');
-                    setTimeout(() => router.push('/dashboard'), 1500);
+
+                    setAuthGeneratedPin(generatedPin);
+                    setSuccess('✅ Account created and activated!');
+                    setMode('show_pin');
                     return;
                 }
 
@@ -221,6 +218,66 @@ export default function StudentAuth() {
         } catch (err) {
             console.error('Activation error:', err);
             setError('Something went wrong during activation. Please try again.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleReset = async () => {
+        if (!usn) { setError('Please enter your USN.'); return; }
+        if (!pin || pin.length !== 4) { setError('Please enter your 4-digit Recovery PIN.'); return; }
+        if (!password || password.length < 4) { setError('Password must be at least 4 characters.'); return; }
+        if (password !== confirmPassword) { setError('Passwords do not match.'); return; }
+
+        setLoading(true);
+        setError('');
+        setSuccess('');
+
+        try {
+            const cleanUSN = usn.toUpperCase().trim();
+            const { data: student, error: fetchErr } = await supabase
+                .from('students')
+                .select('*')
+                .eq('usn', cleanUSN)
+                .maybeSingle();
+
+            if (fetchErr) throw fetchErr;
+            if (!student) {
+                setError('USN is not registered.');
+                return;
+            }
+            if (!student.recovery_pin) {
+                setError('This account does not have a Recovery PIN. Please contact Admin.');
+                return;
+            }
+
+            if (student.recovery_pin !== pin) {
+                setError('Incorrect Recovery PIN.');
+                return;
+            }
+
+            const newHash = await hashPassword(password);
+            const { error: upErr } = await supabase
+                .from('students')
+                .update({
+                    password_hash: newHash,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('usn', cleanUSN);
+
+            if (upErr) throw upErr;
+
+            setSuccess('Password reset successfully! You can now sign in.');
+            setTimeout(() => {
+                setMode('login');
+                setPassword('');
+                setConfirmPassword('');
+                setPin('');
+                setSuccess('');
+            }, 2000);
+        } catch (err) {
+            console.error('Reset error:', err);
+            setError('Something went wrong. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -319,7 +376,9 @@ export default function StudentAuth() {
                 <p style={s.subtext}>
                     {mode === 'login'
                         ? 'Sign in with your USN and password to access your academic dashboard.'
-                        : 'First time? Set a password for your USN to activate your account.'}
+                        : mode === 'activate'
+                            ? 'First time? Set a password and 4-digit PIN to activate your account.'
+                            : 'Forgot password? Enter your USN and 4-digit Recovery PIN to reset.'}
                 </p>
 
                 <div style={s.tabRow}>
@@ -330,50 +389,95 @@ export default function StudentAuth() {
                 {error && <div style={s.errorBox}>{error}</div>}
                 {success && <div style={s.successBox}>{success}</div>}
 
-                <label style={s.label}>University Seat Number</label>
-                <input
-                    style={s.input}
-                    placeholder="e.g. 4AB22CS001"
-                    value={usn}
-                    onChange={e => setUsn(e.target.value.toUpperCase())}
-                    onFocus={e => e.target.style.borderColor = 'var(--tx-main)'}
-                    onBlur={e => e.target.style.borderColor = 'var(--border)'}
-                />
+                {mode === 'show_pin' ? (
+                    <div style={{ textAlign: 'center' }}>
+                        <div style={{ background: 'var(--amber-bg)', padding: '20px', borderRadius: '16px', border: '1px solid var(--amber)', marginBottom: '24px' }}>
+                            <span className="material-icons-round" style={{ fontSize: '32px', color: 'var(--amber)', marginBottom: '12px' }}>warning</span>
+                            <h2 style={{ fontSize: '18px', fontWeight: 900, color: 'var(--amber)', marginBottom: '8px' }}>Important Step!</h2>
+                            <p style={{ fontSize: '13px', color: 'var(--tx-main)', fontWeight: 600, lineHeight: 1.5, marginBottom: '20px' }}>
+                                Please take a screenshot or write down this Recovery PIN. You will need it if you ever forget your password.
+                            </p>
+                            <div style={{ background: 'var(--bg)', padding: '16px', borderRadius: '12px', fontSize: '36px', fontWeight: 900, letterSpacing: '0.2em', color: 'var(--tx-main)', border: '2px dashed var(--amber)' }}>
+                                {authGeneratedPin}
+                            </div>
+                        </div>
 
-                <label style={s.label}>Password</label>
-                <input
-                    style={s.input}
-                    type="password"
-                    placeholder={mode === 'activate' ? 'Create a new password' : 'Enter your password'}
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    onFocus={e => e.target.style.borderColor = 'var(--tx-main)'}
-                    onBlur={e => e.target.style.borderColor = 'var(--border)'}
-                    onKeyDown={e => { if (e.key === 'Enter' && mode === 'login') handleLogin(); }}
-                />
-
-                {mode === 'activate' && (
+                        <button style={s.btn} onClick={() => router.push('/dashboard')}>
+                            I've saved my PIN, go to dashboard
+                        </button>
+                    </div>
+                ) : (
                     <>
-                        <label style={s.label}>Confirm Password</label>
+                        <label style={s.label}>University Seat Number</label>
                         <input
                             style={s.input}
-                            type="password"
-                            placeholder="Re-enter your password"
-                            value={confirmPassword}
-                            onChange={e => setConfirmPassword(e.target.value)}
+                            placeholder="e.g. 4AB22CS001"
+                            value={usn}
+                            onChange={e => setUsn(e.target.value.toUpperCase())}
                             onFocus={e => e.target.style.borderColor = 'var(--tx-main)'}
                             onBlur={e => e.target.style.borderColor = 'var(--border)'}
                         />
+
+                        {mode === 'forgot' && (
+                            <>
+                                <label style={s.label}>4-Digit Recovery PIN</label>
+                                <input
+                                    style={s.input}
+                                    type="password"
+                                    maxLength={4}
+                                    placeholder="e.g. 1234"
+                                    value={pin}
+                                    onChange={e => setPin(e.target.value.replace(/\D/g, ''))}
+                                    onFocus={e => e.target.style.borderColor = 'var(--tx-main)'}
+                                    onBlur={e => e.target.style.borderColor = 'var(--border)'}
+                                />
+                            </>
+                        )}
+
+                        <label style={s.label}>{mode === 'forgot' ? 'New Password' : 'Password'}</label>
+                        <input
+                            style={s.input}
+                            type="password"
+                            placeholder={mode === 'activate' ? 'Create a new password' : mode === 'forgot' ? 'Enter a new password' : 'Enter your password'}
+                            value={password}
+                            onChange={e => setPassword(e.target.value)}
+                            onFocus={e => e.target.style.borderColor = 'var(--tx-main)'}
+                            onBlur={e => e.target.style.borderColor = 'var(--border)'}
+                            onKeyDown={e => { if (e.key === 'Enter' && mode === 'login') handleLogin(); }}
+                        />
+
+                        {(mode === 'activate' || mode === 'forgot') && (
+                            <>
+                                <label style={s.label}>Confirm Password</label>
+                                <input
+                                    style={s.input}
+                                    type="password"
+                                    placeholder="Re-enter your password"
+                                    value={confirmPassword}
+                                    onChange={e => setConfirmPassword(e.target.value)}
+                                    onFocus={e => e.target.style.borderColor = 'var(--tx-main)'}
+                                    onBlur={e => e.target.style.borderColor = 'var(--border)'}
+                                />
+                            </>
+                        )}
+
+                        {mode === 'login' && (
+                            <div style={{ textAlign: 'right', marginBottom: '20px', marginTop: '-10px' }}>
+                                <span onClick={() => { setMode('forgot'); setError(''); setSuccess(''); }} style={{ fontSize: '12px', fontWeight: 600, color: 'var(--primary)', cursor: 'pointer' }}>
+                                    Forgot Password?
+                                </span>
+                            </div>
+                        )}
+
+                        <button
+                            style={{ ...s.btn, opacity: loading ? 0.7 : 1 }}
+                            onClick={mode === 'login' ? handleLogin : mode === 'activate' ? handleActivation : handleReset}
+                            disabled={loading}
+                        >
+                            {loading ? 'Processing...' : mode === 'login' ? 'Sign In' : mode === 'activate' ? 'Activate Account' : 'Reset Password'}
+                        </button>
                     </>
                 )}
-
-                <button
-                    style={{ ...s.btn, opacity: loading ? 0.7 : 1 }}
-                    onClick={mode === 'login' ? handleLogin : handleActivation}
-                    disabled={loading}
-                >
-                    {loading ? 'Processing...' : mode === 'login' ? 'Sign In' : 'Activate Account'}
-                </button>
 
                 <p style={s.footer}>
                     Your account is linked to your institutional USN. Faculty or admin can pre-create your profile.
