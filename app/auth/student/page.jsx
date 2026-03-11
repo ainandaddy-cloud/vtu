@@ -377,8 +377,10 @@ export default function StudentAuth() {
                     {mode === 'login'
                         ? 'Sign in with your USN and password to access your academic dashboard.'
                         : mode === 'activate'
-                            ? 'First time? Set a password and 4-digit PIN to activate your account.'
-                            : 'Forgot password? Enter your USN and 4-digit Recovery PIN to reset.'}
+                            ? 'First time? Set a password to activate your account.'
+                            : mode === 'show_pin'
+                                ? 'Please take a screenshot of this page. You will need this PIN if you ever forget your password.'
+                                : 'Forgot password? Enter your USN and 4-digit Recovery PIN to reset.'}
                 </p>
 
                 <div style={s.tabRow}>
