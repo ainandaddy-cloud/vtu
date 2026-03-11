@@ -12,7 +12,7 @@ export default function Navbar() {
     const [menuOpen, setMenuOpen] = useState(false);
     const [isFaculty, setIsFaculty] = useState(false);
 
-    const publicRoutes = ['/', '/landing', '/auth', '/auth/student', '/faculty/login', '/faculty/register', '/guide'];
+    const publicRoutes = ['/', '/landing', '/auth', '/auth/student', '/faculty/login', '/faculty/register'];
 
     useEffect(() => {
         const stored = localStorage.getItem('theme');
