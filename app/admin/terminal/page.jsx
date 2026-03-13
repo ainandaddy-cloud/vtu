@@ -10,7 +10,11 @@ function AdminPanelContent() {
     const [tab, setTab] = useState('overview');
     const [students, setStudents] = useState([]);
     const [requests, setRequests] = useState([]);
-    const [stats, setStats] = useState({ students: 0, pending: 0, faculty: 0, totalMarks: 0 });
+    const [activityLogs, setActivityLogs] = useState([]);
+    const [activitySearch, setActivitySearch] = useState('');
+    const [activityTypeFilter, setActivityTypeFilter] = useState('all');
+    const [activityDateFilter, setActivityDateFilter] = useState('all');
+    const [stats, setStats] = useState({ students: 0, pending: 0, faculty: 0, totalMarks: 0, activityToday: 0 });
     const [loading, setLoading] = useState(true);
     const [actionId, setActionId] = useState(null);
     const [search, setSearch] = useState('');
@@ -36,21 +40,34 @@ function AdminPanelContent() {
     const loadData = useCallback(async () => {
         setLoading(true);
         try {
-            const [{ data: studs, error: sErr }, { data: reqs, error: rErr }, { data: marksCount }] = await Promise.all([
+            const [{ data: studs, error: sErr }, { data: reqs, error: rErr }, { data: marksCount }, { data: logs }, { data: facultyList }] = await Promise.all([
                 supabase.from('students').select('*').order('created_at', { ascending: false }),
                 supabase.from('faculty_onboarding').select('*').order('created_at', { ascending: false }),
                 supabase.from('marks').select('id', { count: 'exact', head: true }),
+                supabase.from('faculty_activity').select('*').order('created_at', { ascending: false }).limit(300),
+                supabase.from('faculty_onboarding').select('id, full_name, email, department'),
             ]);
             if (sErr) console.error('Students fetch error:', sErr);
             if (rErr) console.error('Requests fetch error:', rErr);
-            const s = studs || [], r = reqs || [];
+            const s = studs || [], r = reqs || [], l = logs || [];
+            // Enrich logs with faculty info
+            const facultyMap = {};
+            (facultyList || []).forEach(f => { facultyMap[f.id] = f; });
+            const enrichedLogs = l.map(log => ({
+                ...log,
+                _faculty: facultyMap[log.faculty_id] || null,
+            }));
             setStudents(s);
             setRequests(r);
+            setActivityLogs(enrichedLogs);
+            const todayStr = new Date().toISOString().slice(0, 10);
+            const todayCount = l.filter(x => x.created_at?.startsWith(todayStr)).length;
             setStats({
                 students: s.length,
                 pending: r.filter(x => x.status === 'pending').length,
                 faculty: r.filter(x => x.status === 'approved').length,
                 totalMarks: marksCount?.length || 0,
+                activityToday: todayCount,
             });
         } catch (err) {
             console.error('Failed to load admin data:', err);
@@ -60,6 +77,7 @@ function AdminPanelContent() {
     }, []);
 
     const openStudent = async (student) => {
+
         setSelectedStudent(student);
         setDetailTab('marks');
         try {
@@ -256,8 +274,37 @@ function AdminPanelContent() {
         { id: 'overview', label: 'Overview', icon: 'space_dashboard' },
         { id: 'students', label: 'Students', icon: 'school' },
         { id: 'requests', label: 'Faculty Access', icon: 'verified_user' },
+        { id: 'activity', label: 'Activity Log', icon: 'history' },
         { id: 'settings', label: 'Settings', icon: 'settings_suggest' },
     ];
+
+    // ── Activity helpers ──────────────────────────────────────
+    const ACTION_COLORS = {
+        SCRAPE: ['#DBEAFE','#1D4ED8'], FETCH: ['#DBEAFE','#1D4ED8'],
+        CLASS_CREATE: ['#DCFCE7','#166534'], CLASS_ADD_STUDENT: ['#DCFCE7','#166534'],
+        CLASS_BULK_IMPORT: ['#F0FDF4','#15803D'], CLASS_FETCH_VTU: ['#E0F2FE','#0369A1'],
+        CLASS_REMOVE_STUDENT: ['#FEF3C7','#92400E'], CLASS_DELETE: ['#FEE2E2','#991B1B'],
+        DELETE_STUDENT: ['#FEE2E2','#991B1B'], URL_TOGGLE: ['#F3F4F6','#4B5563'],
+    };
+    const getActionColor = (t) => ACTION_COLORS[t] || ['#F3F4F6','#6B7280'];
+
+    const filteredActivity = activityLogs.filter(l => {
+        const searchMatch = !activitySearch ||
+            (l.faculty_name||'').toLowerCase().includes(activitySearch.toLowerCase()) ||
+            (l.target_usn||'').toLowerCase().includes(activitySearch.toLowerCase()) ||
+            (l.action_type||'').toLowerCase().includes(activitySearch.toLowerCase());
+        const typeMatch = activityTypeFilter === 'all' || l.action_type === activityTypeFilter;
+        let dateMatch = true;
+        if (activityDateFilter === 'today') {
+            const todayStr = new Date().toISOString().slice(0,10);
+            dateMatch = (l.created_at||'').startsWith(todayStr);
+        } else if (activityDateFilter === '7d') {
+            const cutoff = new Date(Date.now() - 7*24*60*60*1000).toISOString();
+            dateMatch = (l.created_at||'') >= cutoff;
+        }
+        return searchMatch && typeMatch && dateMatch;
+    });
+    const uniqueTypes = [...new Set(activityLogs.map(l => l.action_type).filter(Boolean))];
 
     // Group marks by semester for drawer
     const groupedMarks = {};
@@ -318,8 +365,9 @@ function AdminPanelContent() {
                             { label: 'Pending Access', val: stats.pending, warn: stats.pending > 0, icon: 'pending_actions' },
                             { label: 'Active Faculty', val: stats.faculty, icon: 'badge' },
                             { label: 'Academic Records', val: stats.totalMarks, icon: 'inventory_2' },
+                            { label: 'Faculty Actions Today', val: stats.activityToday, icon: 'history', link: 'activity' },
                         ].map(st => (
-                            <div key={st.label} style={c.statCard}>
+                            <div key={st.label} style={{ ...c.statCard, cursor: st.link ? 'pointer' : 'default' }} onClick={() => st.link && setTab(st.link)}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                     <div style={c.statLabel}>{st.label}</div>
                                     <span className="material-icons-round" style={{ fontSize: '20px', color: 'var(--tx-dim)', opacity: 0.4 }}>{st.icon}</span>
@@ -447,6 +495,91 @@ function AdminPanelContent() {
                         </table>
                     </div>
                 </>}
+
+                {tab === 'activity' && <>
+                    <div style={c.pageLabel}>Admin Control Panel</div>
+                    <h1 style={c.pageTitle}>Faculty Activity Log</h1>
+
+                    {/* Filters */}
+                    <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '24px', alignItems: 'center' }}>
+                        <input
+                            style={{ ...c.searchInput, flex: 1, minWidth: '200px' }}
+                            placeholder="Search faculty, USN, action..."
+                            value={activitySearch}
+                            onChange={e => setActivitySearch(e.target.value)}
+                        />
+                        <select
+                            style={{ ...c.searchInput, width: 'auto', cursor: 'pointer' }}
+                            value={activityTypeFilter}
+                            onChange={e => setActivityTypeFilter(e.target.value)}
+                        >
+                            <option value="all">All Actions</option>
+                            {uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                        <select
+                            style={{ ...c.searchInput, width: 'auto', cursor: 'pointer' }}
+                            value={activityDateFilter}
+                            onChange={e => setActivityDateFilter(e.target.value)}
+                        >
+                            <option value="all">All Time</option>
+                            <option value="today">Today</option>
+                            <option value="7d">Last 7 Days</option>
+                        </select>
+                        <button style={c.actionBtn(false)} onClick={loadData}>
+                            <span className="material-icons-round" style={{ fontSize: '14px', verticalAlign: 'middle', marginRight: '4px' }}>refresh</span>
+                            Refresh
+                        </button>
+                    </div>
+
+                    <div style={c.tableWrap}>
+                        <div style={c.tableHead}>
+                            <div style={c.tableTitle}>All Faculty Actions</div>
+                            <div style={{ fontSize: '12px', color: 'var(--tx-dim)', fontWeight: 600 }}>{filteredActivity.length} records</div>
+                        </div>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                                <tr>{['Timestamp', 'Faculty', 'Dept', 'Action', 'Target / Detail', 'Status'].map(h => <th key={h} style={c.th}>{h}</th>)}</tr>
+                            </thead>
+                            <tbody>
+                                {filteredActivity.map((log, i) => {
+                                    const [bg, col] = getActionColor(log.action_type);
+                                    const ts = log.created_at ? new Date(log.created_at) : null;
+                                    const facultyInfo = log._faculty || {};
+                                    return (
+                                        <tr key={log.id || i} onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-low)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                            <td style={{ ...c.td, fontSize: '11px', color: 'var(--tx-dim)', whiteSpace: 'nowrap' }}>
+                                                {ts ? ts.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—'}
+                                                <div style={{ fontSize: '10px', marginTop: '2px' }}>{ts ? ts.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : ''}</div>
+                                            </td>
+                                            <td style={c.td}>
+                                                <div style={{ fontWeight: 800, fontSize: '13px' }}>{log.faculty_name || facultyInfo.full_name || 'Faculty'}</div>
+                                                <div style={{ fontSize: '11px', color: 'var(--tx-dim)' }}>{facultyInfo.email || ''}</div>
+                                            </td>
+                                            <td style={{ ...c.td, fontSize: '12px', color: 'var(--tx-muted)' }}>{facultyInfo.department || '—'}</td>
+                                            <td style={c.td}>
+                                                <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: '6px', fontSize: '10px', fontWeight: 800, background: bg, color: col }}>
+                                                    {log.action_type || 'ACTION'}
+                                                </span>
+                                            </td>
+                                            <td style={{ ...c.td, fontFamily: 'monospace', fontSize: '12px', color: 'var(--tx-muted)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {log.target_usn || '—'}
+                                            </td>
+                                            <td style={c.td}>
+                                                <span style={{ display: 'inline-block', padding: '3px 8px', borderRadius: '6px', fontSize: '10px', fontWeight: 800, background: log.sync_status === 'SUCCESS' ? 'var(--green-bg)' : 'var(--red-bg)', color: log.sync_status === 'SUCCESS' ? 'var(--green)' : 'var(--red)' }}>
+                                                    {log.sync_status || 'OK'}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                                {filteredActivity.length === 0 && (
+                                    <tr><td colSpan="6" style={{ padding: '60px', textAlign: 'center', color: 'var(--tx-dim)' }}>No activity logs match your filters.</td></tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </>
+                }
 
                 {tab === 'settings' && <>
                     <div style={c.pageLabel}>Admin Control Panel</div>

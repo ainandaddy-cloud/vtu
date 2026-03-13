@@ -641,3 +641,9 @@ body {
   padding: 0 var(--page-px);
   border-bottom: 1px solid var(--border);
 }
+
+/* ── HOVER LIFT (Class cards etc.) ── */
+.gf-hover-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
+}

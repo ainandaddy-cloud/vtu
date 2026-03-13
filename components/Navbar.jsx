@@ -77,6 +77,7 @@ export default function Navbar() {
 
     const facultyLinks = [
         { href: '/faculty/dashboard', icon: 'space_dashboard', label: 'Dashboard' },
+        { href: '/faculty/classes', icon: 'groups', label: 'Classes' },
         { href: '/faculty/reports', icon: 'analytics', label: 'Reports' },
         { href: '/faculty/vtu-urls', icon: 'link', label: 'VTU Result URLs' },
         { href: '/settings', icon: 'settings', label: 'Settings' },

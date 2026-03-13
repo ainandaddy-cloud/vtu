@@ -13,9 +13,13 @@ Usage (run from the *backend* folder, after activating the venv):
 
 import argparse
 import sys
+import os
 import json
 import time
-from scraper.engine import scrape_all_semesters
+
+# Ensure Python can find the 'scraper' package
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from scraper.engine import scrape_all_semesters  # type: ignore
 
 
 def scrape_one(usn: str) -> None:
@@ -48,9 +52,19 @@ def main() -> None:
 
     if args.filename:
         try:
-            with open(args.filename, "r", encoding="utf-8") as f:
-                file_usns = [line.strip().upper() for line in f if line.strip()]
-                usn_list.extend(file_usns)
+            if args.filename.lower().endswith(".csv"):
+                import csv
+                with open(args.filename, "r", encoding="utf-8-sig") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        for key in row.keys():
+                            if key and "usn" in key.lower():
+                                usn_list.append(row[key].strip().upper())
+                                break
+            else:
+                with open(args.filename, "r", encoding="utf-8") as f:
+                    file_usns = [line.strip().upper() for line in f if line.strip()]
+                    usn_list.extend(file_usns)
         except FileNotFoundError:
             print(f"[ERROR] File not found: {args.filename}", file=sys.stderr)
             sys.exit(1)

@@ -109,12 +109,12 @@ export default function LandingPage() {
             </nav>
 
             <section style={s.hero} className="gf-fade-up">
-                <span style={s.eyebrow}>Academic Intelligence System</span>
+                <span style={s.eyebrow}>VTU CGPA · SGPA · Student Progress Tracker</span>
                 <h1 className="gf-hero-title" style={{ color: txt, marginBottom: '24px', maxWidth: '800px' }}>
                     Track it.<br />Understand it.
                 </h1>
                 <p style={s.subtitle}>
-                    A clean, focused tool for students and faculty to calculate SGPA, review marks, and see the full academic picture — without the noise.
+                    GradeFlow calculates your SGPA and CGPA semester by semester, surfaces every pending backlog, and gives you an honest, data-backed picture of your academic standing. Built for VTU students and faculty.
                 </p>
                 <div style={s.ctaRow}>
                     <Link href="/auth/student" style={s.mainCta}>
@@ -129,18 +129,18 @@ export default function LandingPage() {
             <section className="gf-features-grid" style={{ borderTop: `1px solid ${border}` }}>
                 <div style={s.featureCell(false)}>
                     <span style={s.featureNum}>01</span>
-                    <h3 style={s.featureTitle}>Your record, yours alone.</h3>
-                    <p style={s.featureText}>Each student sees only their own data. No one else's USN, no one else's marks. Clean access, every time.</p>
+                    <h3 style={s.featureTitle}>Live CGPA & SGPA, every semester.</h3>
+                    <p style={s.featureText}>Automatically calculates your SGPA per semester and your cumulative CGPA across all semesters, using the official VTU credit-based grading system. No formulas to memorise.</p>
                 </div>
                 <div style={s.featureCell(true)}>
                     <span style={s.featureNum}>02</span>
-                    <h3 style={s.featureTitle}>Instant SGPA calculations.</h3>
-                    <p style={s.featureText}>Enter your marks once, get your SGPA right away. Built on the official VTU grading formula. No guesswork.</p>
+                    <h3 style={s.featureTitle}>Your academic reality check.</h3>
+                    <p style={s.featureText}>Every failed or absent subject is flagged across all semesters, so nothing slips through undetected before the next exam cycle. Know what you owe before it catches you off guard.</p>
                 </div>
                 <div style={s.featureCell(true)}>
                     <span style={s.featureNum}>03</span>
-                    <h3 style={s.featureTitle}>Faculty access without friction.</h3>
-                    <p style={s.featureText}>Faculty members request access, get approved in under 24 hours — after that, a full institutional dashboard awaits.</p>
+                    <h3 style={s.featureTitle}>Full institutional dashboard for faculty.</h3>
+                    <p style={s.featureText}>Faculty get a class-wide view of student performance: semester scores, pending subjects, and progress trends, all auto-scraped from VTU results. No spreadsheets, no manual entry.</p>
                 </div>
             </section>
 

@@ -16,12 +16,21 @@ import time
 import json
 import re
 import ssl
+
+# Import Syllabus Engine from Parent
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+try:
+    from scrape_syllabus import CATALOG_2022, CATALOG_2025 # type: ignore
+    CREDIT_MAP = {r[0]: r[2] for r in CATALOG_2022 + CATALOG_2025}
+except ImportError:
+    CREDIT_MAP = {}
+
 # Global workaround for SSL issues
 ssl._create_default_https_context = ssl._create_unverified_context
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright # type: ignore
 from .captcha_solver import solve_captcha
-from .config import supabase, get_vtu_urls
+from .config import supabase, get_vtu_urls # type: ignore
 
 # ── Configuration ──
 GRADE_POINTS = {
@@ -44,7 +53,6 @@ def _extract_sem(code: str) -> int:
 def _parse_row(texts):
     if not texts: return None
     
-    # Strip Sl. No if present (sometimes VTU has a numeric first column)
     if texts[0].strip().isdigit() and len(texts) > 1:
         texts = texts[1:]
         
@@ -55,40 +63,33 @@ def _parse_row(texts):
     
     name = texts[1].strip()
     
-    # Process remaining columns to find grade and numbers
     rem = texts[2:]
-    
     announced_date = ""
-    # Check if the last column is a Date (Announced / Updated on)
     if rem:
         last_val = rem[-1].strip()
         if re.match(r'^\d{4}-\d{2}-\d{2}$', last_val) or re.match(r'^\d{2}/\d{2}/\d{4}$', last_val):
             announced_date = last_val
-            rem = rem[:-1] # Pop it off so the grade + marks parser doesn't break
+            rem = rem[:-1]
             
     grade = "F"
-    
-    # The grade is typically the last or second to last column
     if rem and rem[-1].strip().upper() in VALID_GRADES:
         grade = rem[-1].strip().upper()
     elif len(rem) > 1 and rem[-2].strip().upper() in VALID_GRADES:
         grade = rem[-2].strip().upper()
     
-    # Extract all numbers from remaining columns safely
     nums = []
     for v in rem:
         m = re.search(r'^(\d+(?:\.\d+)?)$', v.strip())
         if m: nums.append(float(m.group(1)))
         
-    cred = 3
+    # Use accurate VTU Catalog Engine mapping first
+    cred = CREDIT_MAP.get(code, 3)
     int_m = ext_m = tot_m = 0
     
-    # Identify numbers based on common VTU formats (Handles Reval by grabbing the last 3 numbers)
     if len(nums) >= 4:
-        # If there are 4+ numbers (e.g. Reval with old marks), grab the latest ones!
-        # Standard NEP is [CR, INT, EXT, TOT]. Reval is [INT, OldEXT, OldTOT, NewEXT, NewTOT]
-        if nums[0] <= 6:
-            cred = int(nums[0])
+        if 1.0 <= nums[0] <= 6.0: # type: ignore
+            # Only trust VTU printed credit if it wasn't mapped
+            if code not in CREDIT_MAP: cred = int(nums[0])
             int_m = int(nums[1]) if len(nums) > 1 else 0
         else:
             int_m = int(nums[0])
@@ -97,21 +98,18 @@ def _parse_row(texts):
         ext_m = int(nums[-2]) if len(nums) > 1 else int(nums[-1])
         
     elif len(nums) == 3:
-        # Could be NEP with missing EXT (e.g., Absent in SEE) where CR is present.
-        if 1.0 <= nums[0] <= 6.0 and abs(nums[2] - nums[1]) <= 5: 
-            cred = int(nums[0])
+        if 1.0 <= nums[0] <= 6.0 and abs(nums[2] - nums[1]) <= 5: # type: ignore
+            if code not in CREDIT_MAP: cred = int(nums[0])
             int_m = int(nums[1])
             tot_m = int(nums[2])
             ext_m = 0
         else:
-            # Non-NEP: [INT, EXT, TOT]
             int_m = int(nums[0])
             ext_m = int(nums[1])
             tot_m = int(nums[2])
     elif len(nums) == 2:
-        # Usually [INT, TOT] because EXT was 'A' or 'AB'
-        if 1.0 <= nums[0] <= 6.0:
-            cred = int(nums[0])
+        if 1.0 <= nums[0] <= 6.0: # type: ignore
+            if code not in CREDIT_MAP: cred = int(nums[0])
             tot_m = int(nums[1])
             int_m = tot_m
         else:
@@ -122,44 +120,31 @@ def _parse_row(texts):
         tot_m = int(nums[0])
         int_m = tot_m
 
-    # Validation: Ensure total aligns somewhat
     if tot_m == 0 or abs(tot_m - (int_m + ext_m)) > 5:
         if int_m > 0 or ext_m > 0:
             tot_m = int_m + ext_m
 
     parsed_grade = grade.strip().upper()
-    
-    # ── Simplified Grading System — TRUST VTU's GRADE FIRST ──
-    # VTU knows its own rules. Labs, projects, PE etc. may have ext=0 legitimately.
-    
     PASS_GRADES  = {"O", "S", "A+", "B+", "B", "C", "D", "P", "PASS"}
     ABSENT_MARKS = {"AB", "ABSENT"}
     
-    # 1. Special states (Withheld, Not Eligible) — always trust
     if parsed_grade in ("W", "X", "NE"):
         final_grade = parsed_grade
-    # 2. ABSENT: VTU explicitly says AB/ABSENT
     elif parsed_grade in ABSENT_MARKS:
         final_grade = "A"
-    # 3. VTU explicitly says FAIL
     elif parsed_grade == "F" or parsed_grade == "FAIL":
         final_grade = "F"
-    # 4. VTU explicitly says PASS (any passing letter grade) — TRUST IT
-    #    This covers labs/projects/PE where ext=0 is normal
     elif parsed_grade in PASS_GRADES:
         final_grade = "P"
-    # 5. VTU says 'A' — need to distinguish between A-grade (old) and Absent
-    #    If ext=0 and total is low, it's absent. If total >= 40 and ext > 0 it was an old A-grade (pass)
     elif parsed_grade == "A":
         if ext_m == 0 and tot_m < 40:
-            final_grade = "A"  # Absent
+            final_grade = "A"
         elif tot_m >= 40 and ext_m >= 18:
-            final_grade = "P"  # Old A-grade = Pass
+            final_grade = "P"
         elif ext_m == 0:
-            final_grade = "A"  # Absent in SEE
+            final_grade = "A"
         else:
-            final_grade = "F"  # Failed
-    # 6. Fallback: determine from marks (rare — only if VTU gave an unrecognized grade)
+            final_grade = "F"
     elif tot_m >= 40 and (ext_m >= 18 or ext_m == 0):
         final_grade = "P"
     else:
@@ -181,7 +166,7 @@ def _parse_row(texts):
     }
 
 def _check_url(page, url: str, usn: str, dialog_log: list, max_retries: int = 50) -> dict | None:
-    url_short = url.split("/")[-2] if "/" in url else url
+    url_short = url.split("/")[-1] if url.endswith(".php") else (url.split("/")[-2] if "/" in url else url)
     print(f"    [>] Checking {url_short}...", file=sys.stderr, flush=True)
     
     try:
@@ -450,7 +435,7 @@ def scrape_all_semesters(usn: str, faculty_id=None):
                 groups = {}
                 for s in res["subjects"]:
                     s_sem = _extract_sem(s["subject_code"]) or res["semester"] or 1
-                    groups.setdefault(s_sem, []).append(s)
+                    groups.setdefault(s_sem, []).append(s) # type: ignore
                 
                 for sem, subs in groups.items():
                     _save_db(usn, res["name"] or usn, sem, u, subs)
@@ -488,7 +473,9 @@ def _parse_branch(usn):
         "EC": "Electronics & Comm (ECE)", "EE": "Electrical & Electronics (EEE)",
         "ME": "Mechanical Engineering", "CV": "Civil Engineering", 
         "AI": "AI & Machine Learning (AIML)", "DS": "Data Science",
-        "CB": "Comp. Science & Business", "AD": "AI & Data Science"
+        "CB": "Comp. Science & Business", "AD": "AI & Data Science",
+        "CI": "AI & Machine Learning (AIML)", "CD": "Data Science",
+        "RI": "Robotics & AI"
     }
     return mapping.get(code, code)
 
@@ -517,7 +504,7 @@ def _save_db(usn, name, sem, url, subs):
             tc += cr
             tcp += (pts * cr)
             
-        sgpa = round(tcp / tc, 2) if tc > 0 else 0.0
+        sgpa = round(tcp / tc, 2) if tc > 0 else 0.0 # type: ignore
         
         exam_alias = url.split('/')[-2] if ('/' in url) else "Scraped Record"
         
@@ -534,7 +521,7 @@ def _save_db(usn, name, sem, url, subs):
             for s in subs:
                 code = s["subject_code"]
                 # If student already passed this subject-sem in this USN record, and new record is a fail, SKIP
-                if code in already_passed and s["grade"] in ("F", "A", "X", "NE"):
+                if code in already_passed and s["grade"] in ("F", "A", "X", "NE"): # type: ignore
                     print(f"      - Skipping {code} (Student already has a PASS record for this sem)")
                     continue
                 filtered_subs.append({**s, "result_id": r_id, "usn": usn, "semester": sem})
@@ -574,7 +561,7 @@ def _recalculate_remarks(usn):
                 tc += cr
                 tcp += (pts * cr)
                 
-            sgpa = round(tcp / tc, 2) if tc > 0 else 0.0
+            sgpa = round(tcp / tc, 2) if tc > 0 else 0.0 # type: ignore
             
             supabase.table("academic_remarks").upsert({"student_id": sid, "student_usn": usn, "semester": s, "sgpa": sgpa, "backlog_count": len(backlogs), "is_all_clear": len(backlogs) == 0}, on_conflict="student_id,semester").execute()
     except Exception as e:
