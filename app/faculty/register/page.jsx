@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { supabase } from '../../../lib/supabase';
 import Link from 'next/link';
 
 export default function FacultyRegister() {
@@ -16,20 +15,36 @@ export default function FacultyRegister() {
         e.preventDefault();
         setLoading(true); setError('');
         try {
-            const { error: insertErr } = await supabase.from('faculty_onboarding').insert({
-                full_name: form.full_name,
-                email: form.email.toLowerCase(),
-                department: form.department,
-                password: form.password,
-                status: 'pending',
+            // Use API route to bypass any client-side RLS / anon key restrictions
+            const res = await fetch('/api/faculty/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    full_name: form.full_name.trim(),
+                    email: form.email.trim().toLowerCase(),
+                    department: form.department.trim(),
+                    password: form.password,
+                }),
             });
-            if (insertErr) {
-                if (insertErr.code === '23505') { setError('A request with this email is already on file.'); return; }
-                throw insertErr;
+
+            const json = await res.json();
+
+            if (!res.ok) {
+                if (json.code === 'DUPLICATE_EMAIL') {
+                    setError('A request with this email is already on file.');
+                } else {
+                    setError(json.error || 'Something went wrong. Please try again.');
+                }
+                return;
             }
+
             setSubmitted(true);
-        } catch (err) { console.error('Faculty registration error:', err); setError('Something went wrong. Please try again.'); }
-        finally { setLoading(false); }
+        } catch (err) {
+            console.error('Faculty registration network error:', err);
+            setError('Network error. Please check your connection and try again.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const s = {
