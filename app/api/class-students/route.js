@@ -15,7 +15,7 @@ export async function GET(req) {
             .from('class_students')
             .select('id, usn, added_at, added_by')
             .eq('class_id', class_id)
-            .order('added_at', { ascending: true });
+            .order('usn', { ascending: true });
 
         if (memberError) throw memberError;
         if (!members || members.length === 0) {
@@ -109,24 +109,38 @@ export async function POST(req) {
         const { class_id, usn, faculty_id } = await req.json();
         if (!class_id || !usn) return NextResponse.json({ error: 'class_id and usn required.' }, { status: 400 });
 
-        const usns = Array.isArray(usn) ? usn.map(u => u.toUpperCase().trim()) : [usn.toUpperCase().trim()];
+        let rawUsns = Array.isArray(usn) ? usn : [usn];
+        const usns = [...new Set(rawUsns.map(u => u.toUpperCase().trim()).filter(Boolean))];
 
-        // Ensure student profiles exist
-        for (const u of usns) {
-            const { data: existing } = await supabase.from('students').select('id').eq('usn', u).maybeSingle();
-            if (!existing) {
-                await supabase.from('students').insert({ usn: u, name: u }).catch(() => { });
+        if (usns.length === 0) return NextResponse.json({ error: 'No USNs provided.' }, { status: 400 });
+
+        // Ensure student profiles exist (BULK OPTIMIZED)
+        const { data: existing } = await supabase.from('students').select('usn').in('usn', usns);
+        const existingSet = new Set((existing || []).map(e => e.usn));
+
+        const toInsert = usns.filter(u => !existingSet.has(u)).map(u => ({ usn: u, name: u }));
+        if (toInsert.length > 0) {
+            // chunk the insert just in case, using upsert to avoid chunk failure
+            for (let i = 0; i < toInsert.length; i += 100) {
+                await supabase.from('students')
+                    .upsert(toInsert.slice(i, i + 100), { onConflict: 'usn', ignoreDuplicates: true })
+                    .catch(() => { });
             }
         }
 
         const rows = usns.map(u => ({ class_id, usn: u, added_by: faculty_id || null }));
-        const { data, error } = await supabase
-            .from('class_students')
-            .upsert(rows, { onConflict: 'class_id,usn', ignoreDuplicates: true })
-            .select();
+        let addedCount = 0;
 
-        if (error) throw error;
-        return NextResponse.json({ success: true, added: data?.length || usns.length });
+        for (let i = 0; i < rows.length; i += 100) {
+            const { data, error } = await supabase
+                .from('class_students')
+                .upsert(rows.slice(i, i + 100), { onConflict: 'class_id,usn', ignoreDuplicates: true })
+                .select();
+            if (error) throw error;
+            addedCount += data?.length || 0;
+        }
+
+        return NextResponse.json({ success: true, added: addedCount || usns.length });
     } catch (err) {
         console.error('[POST /api/class-students]', err);
         return NextResponse.json({ error: 'Failed to add student.' }, { status: 500 });

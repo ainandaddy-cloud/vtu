@@ -273,6 +273,7 @@ function AdminPanelContent() {
     const nav = [
         { id: 'overview', label: 'Overview', icon: 'space_dashboard' },
         { id: 'students', label: 'Students', icon: 'school' },
+        { id: 'classes', label: 'Classes', icon: 'groups', href: '/admin/classes' },
         { id: 'requests', label: 'Faculty Access', icon: 'verified_user' },
         { id: 'activity', label: 'Activity Log', icon: 'history' },
         { id: 'settings', label: 'Settings', icon: 'settings_suggest' },
@@ -328,7 +329,7 @@ function AdminPanelContent() {
                 <div style={c.sep} />
 
                 {nav.map(n => (
-                    <button key={n.id} style={c.navBtn(tab === n.id)} onClick={() => setTab(n.id)}>
+                    <button key={n.id} style={c.navBtn(tab === n.id)} onClick={() => n.href ? router.push(n.href) : setTab(n.id)}>
                         <span className="material-icons-round" style={{ fontSize: '18px' }}>{n.icon}</span>
                         {n.label}
                         {n.id === 'requests' && stats.pending > 0 && (

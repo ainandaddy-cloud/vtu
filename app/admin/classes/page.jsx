@@ -78,6 +78,7 @@ function ClassesContent() {
     const [selectedClass, setSelectedClass] = useState(null);
     const [students, setStudents] = useState([]);
     const [loadingStudents, setLoadingStudents] = useState(false);
+    const router = useRouter();
     const [semFilter, setSemFilter] = useState('all');
     const [classTab, setClassTab] = useState('roster'); // 'roster', 'analytics'
     const [viewingList, setViewingList] = useState(null); // { title: string, columns: [{...}], data: [...] }
@@ -115,7 +116,7 @@ function ClassesContent() {
     const fileRef = useRef(null);
 
     useEffect(() => {
-        const s = localStorage.getItem('faculty_session');
+        const s = localStorage.getItem('admin_session');
         if (s) setFaculty(JSON.parse(s));
         fetchClasses();
     }, []);
@@ -567,7 +568,7 @@ function ClassesContent() {
                                 </table>
                             </div>
                         )}
-            </div>
+                </div>
             </div>
             )}
 
@@ -859,9 +860,6 @@ function ClassesContent() {
                         </div>
                     </div>
                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
-                        <div style={{ fontSize: '12px', color: 'var(--tx-dim)', display: 'flex', alignItems: 'center' }}>{vtuUrls.filter(u => u.is_active).length} of {vtuUrls.length} active</div>
-                        <button style={btn('ghost')} onClick={() => setShowUrlModal(false)}>Cancel</button>
-                        <button style={btn('primary')} onClick={fetchAllVtu}>Fetch with Active URLs ({vtuUrls.filter(u => u.is_active).length})</button>
                     </div>
                 </div>
             </div>}
@@ -900,18 +898,24 @@ function ClassesContent() {
                     </div>
                 </div>
             )}
-
         </div>
     );
 
     // ── CLASS LIST VIEW ──────────────────────────────────────
     return (
         <div style={S.page} className="gf-fade-up">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>
+                <button onClick={() => router.push('/admin/terminal')} style={{ ...btn('ghost'), padding: '6px 12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span className="material-icons-round" style={{ fontSize: '18px' }}>arrow_back</span>
+                    Return to Admin Terminal
+                </button>
+            </div>
+            
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '36px', flexWrap: 'wrap', gap: '16px' }}>
                 <div>
-                    <div style={S.eyebrow}>Faculty Command Center</div>
+                    <div style={S.eyebrow}>Institutional Admin</div>
                     <h1 style={S.title}>Classes</h1>
-                    <p style={S.subtitle}>Create and manage classes. All faculty can view and edit class data.</p>
+                    <p style={S.subtitle}>Create and manage classes. All faculty and admins can view and edit class data.</p>
                 </div>
                 <button style={btn('primary')} onClick={() => setShowCreate(true)}>
                     <span className="material-icons-round" style={{ fontSize: '15px', verticalAlign: 'middle', marginRight: '6px' }}>add</span>New Class
@@ -984,5 +988,5 @@ function ClassesContent() {
 }
 
 export default function ClassesPage() {
-    return <AuthGuard role="faculty"><ClassesContent /></AuthGuard>;
+    return <AuthGuard role="admin"><ClassesContent /></AuthGuard>;
 }

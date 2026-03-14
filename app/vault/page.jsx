@@ -113,7 +113,7 @@ function BatchUploadContent() {
 
                                 await supabase
                                     .from('marks')
-                                    .upsert(marksData, { onConflict: 'student_id,subject_code,semester' });
+                                    .upsert(marksData, { onConflict: 'student_id,subject_code,semester', ignoreDuplicates: true });
                             }
 
                             // Update student name if found

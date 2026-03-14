@@ -17,11 +17,17 @@ def verify_and_insert_admin():
     
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
     
-    email = "mohamedainan3@gmail.com"
-    password = "VTU-FK-534662"
+    email = "admin@gradeflow.com"
+    password = "GradeFlowAdmin!2026"
     hashed_password = hash_password(password)
     
     try:
+        # 1. Remove old admin
+        old_email = "mohamedainan3@gmail.com"
+        supabase.table("admin_users").delete().eq("email", old_email).execute()
+        print(f"Removed old admin: {old_email}")
+        
+        # 2. Add new admin
         data = {
             "email": email,
             "password_hash": hashed_password

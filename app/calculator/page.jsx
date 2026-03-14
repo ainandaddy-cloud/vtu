@@ -55,22 +55,11 @@ function CalculatorContent() {
     const refreshMatrix = async (b, s, sch) => {
         setLoading(true);
         try {
-            // Priority 1: Fetch from Institutional Catalog (Production Database)
-            const res = await fetch(`/api/subjects?branch=${b}&semester=${s}&scheme=${sch}`);
-            const json = await res.json();
-
-            if (json.success && json.subjects.length > 0) {
-                setSubjects(json.subjects.map(sub => ({ ...sub, id: Math.random(), total: 0, grade: '-' })));
-            } else {
-                // Priority 2: Fallback to local hardcoded data (Legacy/Development)
-                const list = getSubjectsFor(b, s, sch);
-                setSubjects(list.length ? list.map(sub => ({ ...sub, id: Math.random(), total: 0, grade: '-' })) : []);
-            }
-        } catch (err) {
-            console.error("Catalog Fetch Error:", err);
-            // Fallback
             const list = getSubjectsFor(b, s, sch);
             setSubjects(list.length ? list.map(sub => ({ ...sub, id: Math.random(), total: 0, grade: '-' })) : []);
+        } catch (err) {
+            console.error("Catalog Fetch Error:", err);
+            setSubjects([]);
         } finally {
             setLoading(false);
         }
