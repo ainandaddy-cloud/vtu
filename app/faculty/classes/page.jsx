@@ -411,50 +411,47 @@ function ClassesContent() {
 
             {msg && <div style={msgBox(msg.startsWith('✓'))}>{msg}</div>}
 
-            {/* Stat cards */}
-            <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', marginBottom: '28px' }}>
-                {[
-                    { label: 'Students', val: students.length, color: 'var(--tx-main)' },
-                    { label: 'Avg CGPA', val: avgCgpa, color: 'var(--primary)' },
-                    { label: 'Backlogs', val: totalBacklogs, color: totalBacklogs > 0 ? 'var(--red)' : 'var(--green)' },
-                ].map(st => (
-                    <div key={st.label} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '14px', padding: '20px', flex: 1, minWidth: '130px' }}>
-                        <div style={{ fontSize: '10px', fontWeight: 800, color: 'var(--tx-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>{st.label}</div>
-                        <div style={{ fontSize: '28px', fontWeight: 900, color: st.color, letterSpacing: '-0.04em' }}>{st.val}</div>
+            {/* Analytics View is now the only view */}
+            <div className="gf-fade-up">
+                {/* Stats */}
+                <div style={c.statGrid}>
+                    <div style={c.statCard}>
+                        <div style={c.statLabel}>Total Students</div>
+                        <div style={c.statVal}>{students.length}</div>
                     </div>
-                ))}
-                {classTopper && (
-                    <div style={{ background: 'linear-gradient(135deg,var(--surface),var(--surface-low))', border: '1px solid var(--primary)', borderRadius: '14px', padding: '20px', flex: 2, minWidth: '200px' }}>
-                        <div style={{ fontSize: '10px', fontWeight: 800, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>🏆 Class Topper</div>
-                        <div style={{ fontSize: '17px', fontWeight: 900, color: 'var(--tx-main)' }}>{classTopper.name}</div>
-                        <div style={{ fontSize: '12px', color: 'var(--tx-muted)' }}>{classTopper.usn} · CGPA {classTopper.cgpa?.toFixed(2)}</div>
+                    <div style={c.statCard}>
+                        <div style={c.statLabel}>Avg CGPA</div>
+                        <div style={{ ...c.statVal, color: 'var(--primary)' }}>{avgCgpa}</div>
+                    </div>
+                    <div style={c.statCard}>
+                        <div style={c.statLabel}>Backlogs</div>
+                        <div style={{ ...c.statVal, color: totalBacklogs > 0 ? 'var(--red)' : 'var(--green)' }}>{totalBacklogs}</div>
+                    </div>
+                    {classTopper && (
+                        <div style={{ ...c.statCard, background: 'linear-gradient(135deg,var(--surface),var(--surface-low))', border: '1px solid var(--primary)', flex: 2 }}>
+                            <div style={{ ...c.statLabel, color: 'var(--primary)' }}>🏆 Class Topper</div>
+                            <div style={{ fontSize: '17px', fontWeight: 900, color: 'var(--tx-main)' }}>{classTopper.name}</div>
+                            <div style={{ fontSize: '12px', color: 'var(--tx-muted)' }}>{classTopper.usn} · CGPA {classTopper.cgpa?.toFixed(2)}</div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Top 10 bar */}
+                {top10.length > 1 && (
+                    <div style={{ ...S.card, padding: '16px 20px', marginBottom: '24px', overflowX: 'auto' }}>
+                        <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--tx-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>Class Top 10 Rankers</div>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'nowrap' }}>
+                            {top10.map((s, i) => (
+                                <button key={s.usn} onClick={() => { openStudentDrawer(s); }} style={{ background: 'var(--surface-low)', border: '1px solid var(--border)', borderRadius: '10px', padding: '8px 14px', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                    <div style={{ fontSize: '10px', fontWeight: 800, color: 'var(--tx-dim)' }}>#{i + 1} {i === 0 ? '🏆' : i === 1 ? '🥈' : i === 2 ? '🥉' : ''}</div>
+                                    <div style={{ fontSize: '12px', fontWeight: 800, color: 'var(--tx-main)' }}>{s.name}</div>
+                                    <div style={{ fontSize: '11px', color: 'var(--primary)', fontWeight: 700 }}>{s.cgpa?.toFixed(2)}</div>
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 )}
-            </div>
 
-            {/* Sub-Tabs */}
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '1px solid var(--border)', paddingBottom: '16px' }}>
-                <button onClick={() => setClassTab('roster')} style={{ padding: '8px 16px', borderRadius: '8px', fontWeight: 800, fontSize: '13px', cursor: 'pointer', border: 'none', fontFamily: 'inherit', background: classTab === 'roster' ? 'var(--primary)' : 'transparent', color: classTab === 'roster' ? 'var(--bg)' : 'var(--tx-muted)' }}>Students</button>
-                <button onClick={() => setClassTab('analytics')} style={{ padding: '8px 16px', borderRadius: '8px', fontWeight: 800, fontSize: '13px', cursor: 'pointer', border: 'none', fontFamily: 'inherit', background: classTab === 'analytics' ? 'var(--primary)' : 'transparent', color: classTab === 'analytics' ? 'var(--bg)' : 'var(--tx-muted)' }}>Class Analytics & Rankings</button>
-            </div>
-
-            {classTab === 'analytics' && (
-                <div className="gf-fade-up">
-                    {/* Top 10 bar */}
-            {top10.length > 1 && (
-                <div style={{ ...S.card, padding: '16px 20px', marginBottom: '24px', overflowX: 'auto' }}>
-                    <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--tx-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>Top 10 Rankers</div>
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'nowrap' }}>
-                        {top10.map((s, i) => (
-                            <button key={s.usn} onClick={() => { openStudentDrawer(s); }} style={{ background: 'var(--surface-low)', border: '1px solid var(--border)', borderRadius: '10px', padding: '8px 14px', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                <div style={{ fontSize: '10px', fontWeight: 800, color: 'var(--tx-dim)' }}>#{i + 1} {i === 0 ? '🏆' : i === 1 ? '🥈' : i === 2 ? '🥉' : ''}</div>
-                                <div style={{ fontSize: '12px', fontWeight: 800, color: 'var(--tx-main)' }}>{s.name}</div>
-                                <div style={{ fontSize: '11px', color: 'var(--primary)', fontWeight: 700 }}>{s.cgpa?.toFixed(2)}</div>
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            )}
 
             {/* Subject & Semester Toppers */}
             {(subjectToppers.length > 0 || semToppers.length > 0) && (
@@ -462,12 +459,12 @@ function ClassesContent() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
                         <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--tx-main)' }}>📚 Sem {selectedSem} Toppers (Overall & Subjects)</div>
                         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                            {availableSems.map(s => (
+                            {[1, 2, 3, 4, 5, 6, 7, 8].map(s => (
                                 <button key={s} onClick={async () => { 
                                     setSelectedSem(s); 
                                     const { data: remarks } = await supabase.from('academic_remarks').select('student_usn,semester,sgpa').in('student_usn', students.map(st=>st.usn));
                                     computeToppers(allMarks, students, s, remarks || []); 
-                                }} style={{ padding: '4px 12px', borderRadius: '8px', fontWeight: 800, fontSize: '11px', cursor: 'pointer', border: 'none', fontFamily: 'inherit', background: selectedSem === s ? 'var(--primary)' : 'var(--surface-low)', color: selectedSem === s ? 'var(--bg)' : 'var(--tx-dim)' }}>Sem {s}</button>
+                                }} style={{ padding: '6px 14px', borderRadius: '8px', fontWeight: 800, fontSize: '12px', cursor: 'pointer', border: 'none', fontFamily: 'inherit', background: selectedSem === s ? 'var(--primary)' : 'var(--surface-low)', color: selectedSem === s ? 'var(--bg)' : 'var(--tx-dim)' }}>Sem {s}</button>
                             ))}
                         </div>
                     </div>
@@ -485,8 +482,57 @@ function ClassesContent() {
                                     </div>
                                 ))}
                             </div>
-                            {semToppers.length > 5 && (
-                                <button onClick={() => setViewingList({ title: `Sem ${selectedSem} Overall Rankings`, type: semToppers[0]?.type || 'Score', data: semToppers })}   style={{ ...btn('ghost'), marginTop: '12px', fontSize: '11px', fontWeight: 800 }}>View Full List ({semToppers.length} students)</button>
+                           {semToppers.length > 5 && (
+                                <button onClick={() => setViewingList(viewingList?.title === `Sem ${selectedSem} Overall Rankings` ? null : { title: `Sem ${selectedSem} Overall Rankings`, type: semToppers[0]?.type || 'Score', data: semToppers })} style={{ ...btn('ghost'), marginTop: '12px', fontSize: '11px', fontWeight: 800 }}>
+                                    {viewingList?.title === `Sem ${selectedSem} Overall Rankings` ? 'Close List' : `View Full Ranked List (${semToppers.length} students)`}
+                                </button>
+                            )}
+
+                            {/* Inline Full List Rendering */}
+                            {viewingList && viewingList.title.includes(`Sem ${selectedSem} Overall`) && (
+                                <div style={{ marginTop: '20px', borderTop: '1px solid var(--border)', paddingTop: '20px' }} className="gf-fade-up">
+                                    <div style={{ overflowX: 'auto' }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                            <thead>
+                                                <tr>{['Rank', 'Name / USN', viewingList.type, 'Backlogs', 'Actions'].map(h => <th key={h} style={{ ...S.th, textAlign: h === 'Name / USN' ? 'left' : 'center' }}>{h}</th>)}</tr>
+                                            </thead>
+                                            <tbody>
+                                                {viewingList.data.map((r, i) => {
+                                                    const s = students.find(st => st.usn === r.usn) || {};
+                                                    const sc = scrapeStatus[r.usn];
+                                                    return (
+                                                        <tr key={r.usn} onClick={() => openStudentDrawer(r)} style={{ cursor: 'pointer' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-low)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                                            <td style={{ ...S.td, fontSize: '11px', fontWeight: 800, color: 'var(--tx-dim)', textAlign: 'center' }}>#{i + 1}</td>
+                                                            <td style={{ ...S.td }}>
+                                                                <div style={{ fontWeight: 800, fontSize: '12px' }}>{r.name}</div>
+                                                                <div style={{ fontSize: '10px', color: 'var(--tx-muted)', fontFamily: 'monospace' }}>{r.usn}</div>
+                                                            </td>
+                                                            <td style={{ ...S.td, fontWeight: 900, color: 'var(--primary)', textAlign: 'center' }}>{viewingList.type === 'SGPA' ? r.score?.toFixed(2) : r.score}</td>
+                                                            <td style={{ ...S.td, textAlign: 'center' }}>
+                                                                <span style={{ fontWeight: 900, color: s.total_backlogs > 0 ? 'var(--red)' : 'var(--green)', background: s.total_backlogs > 0 ? 'var(--red-bg)' : 'var(--green-bg)', padding: '2px 8px', borderRadius: '5px', fontSize: '10px' }}>
+                                                                    {s.total_backlogs > 0 ? s.total_backlogs : 'Clear'}
+                                                                </span>
+                                                            </td>
+                                                            <td style={{ ...S.td, textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                                                                <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                                                                    <button onClick={() => scrapeStudent(r.usn)} style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface-low)', cursor: 'pointer' }} title="Fetch VTU">
+                                                                        <span className="material-icons-round" style={{ fontSize: '14px', color: 'var(--tx-dim)' }}>{sc === 'scraping' ? 'sync' : 'cloud_download'}</span>
+                                                                    </button>
+                                                                    <button onClick={(e) => openTransfer({ usn: r.usn, name: r.name }, e)} style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface-low)', cursor: 'pointer' }} title="Transfer">
+                                                                        <span className="material-icons-round" style={{ fontSize: '14px', color: 'var(--tx-dim)' }}>swap_horiz</span>
+                                                                    </button>
+                                                                    <button onClick={() => removeStudent(r.usn)} style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--red)', background: 'var(--red-bg)', cursor: 'pointer' }} title="Remove">
+                                                                        <span className="material-icons-round" style={{ fontSize: '14px', color: 'var(--red)' }}>remove_circle_outline</span>
+                                                                    </button>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
                             )}
                         </div>
                     )}
@@ -506,7 +552,22 @@ function ClassesContent() {
                                                 <div style={{ fontSize: '12px', fontWeight: 900, color: i === 0 ? 'var(--primary)' : 'var(--tx-main)' }}>{r.total}</div>
                                             </div>
                                         ))}
-                                        <button onClick={() => setViewingList({ title: `${t.code} - ${t.name}`, type: 'Total Marks', showMarks: true, data: t.allScores.map(r => ({ usn: r.usn, name: r.name, score: r.total, internal: r.internal, external: r.external, grade: r.grade })) })} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: '11px', fontWeight: 800, padding: '8px 0 0 0', cursor: 'pointer', display: 'block', width: '100%', textAlign: 'center', borderTop: '1px dashed var(--border)', marginTop: '8px' }}>View Full List</button>
+                                        <button onClick={() => setViewingList(viewingList?.title === `${t.code} - ${t.name}` ? null : { title: `${t.code} - ${t.name}`, type: 'Total Marks', showMarks: true, data: t.allScores.map(r => ({ usn: r.usn, name: r.name, score: r.total, internal: r.internal, external: r.external, grade: r.grade })) })} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: '11px', fontWeight: 800, padding: '8px 0 0 0', cursor: 'pointer', display: 'block', width: '100%', textAlign: 'center', borderTop: '1px dashed var(--border)', marginTop: '8px' }}>
+                                            {viewingList?.title === `${t.code} - ${t.name}` ? 'Close List' : 'View Full List'}
+                                        </button>
+                                        {viewingList && viewingList.title === `${t.code} - ${t.name}` && (
+                                            <div style={{ marginTop: '12px', borderTop: '1px solid var(--border)', paddingTop: '12px' }} className="gf-fade-up">
+                                                {viewingList.data.map((r, i) => {
+                                                    const isFail = ['F', 'A', 'X', 'NE', 'W'].includes(r.grade?.toUpperCase());
+                                                    return (
+                                                        <div key={r.usn} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0' }}>
+                                                            <div style={{ fontSize: '11px', color: 'var(--tx-muted)' }}>#{i + 1} {r.name}</div>
+                                                            <div style={{ fontSize: '11px', fontWeight: 800, color: isFail ? 'var(--red)' : 'var(--tx-main)' }}>{r.score} {r.grade}</div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                             </div>
@@ -515,74 +576,7 @@ function ClassesContent() {
                 </div>
             )}
             </div>
-            )}
 
-            {classTab === 'roster' && (
-                <div className="gf-fade-up">
-
-            {/* Semester filter tabs */}
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '16px' }}>
-                {['all', 1, 2, 3, 4, 5, 6, 7, 8].map(s => (
-                    <button key={s} onClick={() => setSemFilter(String(s))} style={{ padding: '6px 14px', borderRadius: '8px', fontWeight: 700, fontSize: '12px', cursor: 'pointer', border: `1px solid ${String(semFilter) === String(s) ? 'var(--primary)' : 'var(--border)'}`, fontFamily: 'inherit', background: String(semFilter) === String(s) ? 'var(--primary)' : 'var(--surface-low)', color: String(semFilter) === String(s) ? 'var(--bg)' : 'var(--tx-muted)' }}>
-                        {s === 'all' ? 'All Students' : `Sem ${s}`}
-                    </button>
-                ))}
-            </div>
-
-            {/* Roster */}
-            <div style={{ ...S.card, padding: 0, overflow: 'hidden' }}>
-                <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--tx-main)' }}>Students</div>
-                    <div style={{ fontSize: '11px', color: 'var(--tx-dim)' }}>{filteredStudents.length} students</div>
-                </div>
-                {loadingStudents ? <div style={{ padding: '48px', textAlign: 'center', color: 'var(--tx-dim)' }}>Loading…</div>
-                    : filteredStudents.length === 0 ? <div style={{ padding: '48px', textAlign: 'center', color: 'var(--tx-dim)' }}>No students{semFilter !== 'all' ? ` in Sem ${semFilter}` : '. Add students above.'}.</div>
-                        : (
-                            <div style={{ overflowX: 'auto' }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                    <thead>
-                                        <tr>{['#', 'Name', 'USN', 'Sem', 'CGPA', 'Backlogs', 'Fetch VTU', 'Transfer', ''].map(h => <th key={h} style={S.th}>{h}</th>)}</tr>
-                                    </thead>
-                                    <tbody>
-                                        {filteredStudents.map((s, idx) => {
-                                            const sc = scrapeStatus[s.usn];
-                                            return (
-                                                <tr key={s.usn} onClick={() => openStudentDrawer(s)} style={{ cursor: 'pointer' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-low)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                                                    <td style={{ ...S.td, color: 'var(--tx-dim)', fontSize: '11px' }}>{idx + 1}</td>
-                                                    <td style={{ ...S.td, fontWeight: 800 }}>{s.name}</td>
-                                                    <td style={{ ...S.td, fontFamily: 'monospace', color: 'var(--tx-muted)', fontSize: '11px' }}>{s.usn}</td>
-                                                    <td style={{ ...S.td, textAlign: 'center' }}>{s.semester || '—'}</td>
-                                                    <td style={{ ...S.td, textAlign: 'center', fontWeight: 900, color: s.cgpa ? 'var(--primary)' : 'var(--tx-dim)' }}>{s.cgpa != null ? s.cgpa?.toFixed(2) : '—'}</td>
-                                                    <td style={{ ...S.td, textAlign: 'center' }}>
-                                                        <span style={{ fontWeight: 900, color: s.total_backlogs > 0 ? 'var(--red)' : 'var(--green)', background: s.total_backlogs > 0 ? 'var(--red-bg)' : 'var(--green-bg)', padding: '3px 10px', borderRadius: '6px', fontSize: '11px', whiteSpace: 'nowrap' }}>
-                                                            {s.total_backlogs > 0 ? s.total_backlogs : 'Clear ✓'}
-                                                        </span>
-                                                    </td>
-                                                    <td style={{ ...S.td, textAlign: 'center' }} onClick={e => e.stopPropagation()}>
-                                                        <button onClick={() => scrapeStudent(s.usn)} disabled={sc === 'scraping'} style={{ padding: '5px 12px', borderRadius: '8px', fontWeight: 700, fontSize: '11px', cursor: 'pointer', border: 'none', fontFamily: 'inherit', background: sc === 'queued' ? 'var(--green-bg)' : sc === 'error' ? 'var(--red-bg)' : 'var(--surface-low)', color: sc === 'queued' ? 'var(--green)' : sc === 'error' ? 'var(--red)' : 'var(--tx-muted)' }}>
-                                                            {sc === 'scraping' ? '…' : sc === 'queued' ? 'Queued ✓' : sc === 'error' ? 'Error' : 'Fetch VTU'}
-                                                        </button>
-                                                    </td>
-                                                    <td style={{ ...S.td, textAlign: 'center' }} onClick={e => e.stopPropagation()}>
-                                                        <button title="Transfer to another class" onClick={e => openTransfer(s, e)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tx-dim)' }}>
-                                                            <span className="material-icons-round" style={{ fontSize: '18px' }}>swap_horiz</span>
-                                                        </button>
-                                                    </td>
-                                                    <td style={{ ...S.td, textAlign: 'center' }} onClick={e => e.stopPropagation()}>
-                                                        <button title="Remove from class" onClick={() => removeStudent(s.usn)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tx-dim)' }}>
-                                                            <span className="material-icons-round" style={{ fontSize: '18px' }}>remove_circle_outline</span>
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-            </div>
-            </div>
-            )}
 
             {/* ── Student Drawer ── */}
             {openStudent && (
