@@ -173,21 +173,34 @@ function ClassesContent() {
             byStudent[m.usn] += m.total || 0;
         });
         
-        const nameMap = Object.fromEntries(studs.map(s => [s.usn, s.name]));
+        const result = Object.entries(bySubj).map(([code, rows]) => {
+            const allScores = studs.map(s => {
+                const r = rows.find(x => x.usn === s.usn);
+                return r 
+                  ? { usn: s.usn, name: s.name, total: r.total ?? 0, internal: r.internal ?? '-', external: r.external ?? '-', grade: r.grade ?? '-' }
+                  : { usn: s.usn, name: s.name, total: 0, internal: '-', external: '-', grade: '-' };
+            }).sort((a, b) => b.total - a.total);
+            
+            return {
+                code,
+                name: rows[0].subject_name || code,
+                allScores
+            };
+        }).sort((a, b) => a.code.localeCompare(b.code));
         
-        const result = Object.entries(bySubj).map(([code, rows]) => ({
-            code,
-            name: rows[0].subject_name || code,
-            allScores: rows.sort((a, b) => b.total - a.total).map(r => ({ usn: r.usn, name: nameMap[r.usn] || r.usn, total: r.total, internal: r.internal, external: r.external, grade: r.grade }))
-        })).sort((a, b) => a.code.localeCompare(b.code));
         setSubjectToppers(result);
 
         // Compute Semester Toppers (Top 5 & Full List)
         let fullSem = [];
         if (remarks && remarks.some(r => r.semester === sem && r.sgpa !== null)) {
-            fullSem = remarks.filter(r => r.semester === sem && r.sgpa !== null).map(r => ({ usn: r.student_usn, name: nameMap[r.student_usn] || r.student_usn, score: r.sgpa, type: 'SGPA' })).sort((a, b) => b.score - a.score);
+            fullSem = studs.map(s => {
+                const r = remarks.find(x => x.student_usn === s.usn && x.semester === sem && x.sgpa !== null);
+                return { usn: s.usn, name: s.name, score: r ? r.sgpa : 0, type: 'SGPA' };
+            }).sort((a, b) => b.score - a.score);
         } else {
-            fullSem = Object.entries(byStudent).map(([usn, total]) => ({ usn, name: nameMap[usn] || usn, score: total, type: 'Marks' })).sort((a, b) => b.score - a.score);
+            fullSem = studs.map(s => ({
+                usn: s.usn, name: s.name, score: byStudent[s.usn] || 0, type: 'Marks'
+            })).sort((a, b) => b.score - a.score);
         }
         setSemToppers(fullSem);
     };
@@ -417,6 +430,9 @@ function ClassesContent() {
                     <button style={btn('ghost')} onClick={() => { loadVtuUrls(); setShowUrlModal(true); }} disabled={students.length === 0}>
                         <span className="material-icons-round" style={{ fontSize: '14px', verticalAlign: 'middle', marginRight: '4px' }}>cloud_download</span>Fetch All VTU
                     </button>
+                    <button style={btn('ghost')} onClick={() => { setShowEditSem(selectedClass); setEditSemVal(selectedClass.semester); }}>
+                        <span className="material-icons-round" style={{ fontSize: '14px', verticalAlign: 'middle', marginRight: '4px' }}>edit</span>Edit Sem
+                    </button>
                     <button style={btn('danger')} onClick={() => deleteClass(selectedClass.id)}>Delete Class</button>
                 </div>
 
@@ -424,7 +440,13 @@ function ClassesContent() {
 
             {msg && <div style={msgBox(msg.startsWith('✓'))}>{msg}</div>}
 
-            {/* Analytics View is now the only view */}
+            {/* TAB SWITCHER */}
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '24px', borderBottom: '1px solid var(--border)', paddingBottom: '10px' }}>
+                <button onClick={() => setClassTab('analytics')} style={{ padding: '8px 16px', background: classTab === 'analytics' ? 'var(--primary)' : 'transparent', color: classTab === 'analytics' ? 'var(--bg)' : 'var(--tx-dim)', borderRadius: '10px', border: 'none', fontWeight: 800, fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit' }}>Analytics & Rankings</button>
+                <button onClick={() => setClassTab('roster')} style={{ padding: '8px 16px', background: classTab === 'roster' ? 'var(--primary)' : 'transparent', color: classTab === 'roster' ? 'var(--bg)' : 'var(--tx-dim)', borderRadius: '10px', border: 'none', fontWeight: 800, fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit' }}>Students List</button>
+            </div>
+
+            {classTab === 'analytics' && (
             <div className="gf-fade-up">
                 {/* Stats */}
                 <div style={c.statGrid}>
@@ -466,13 +488,12 @@ function ClassesContent() {
                 )}
 
 
-            {/* Subject & Semester Toppers */}
-            {(subjectToppers.length > 0 || semToppers.length > 0) && (
-                <div style={{ ...S.card, marginBottom: '24px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
-                        <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--tx-main)' }}>📚 Sem {selectedSem} Toppers (Overall & Subjects)</div>
-                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                            {[1, 2, 3, 4, 5, 6, 7, 8].map(s => (
+            {/* Semester Analytics Header & Tabs */}
+            <div style={{ ...S.card, marginBottom: '24px' }}>
+                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+                     <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--tx-main)' }}>📚 Semester {selectedSem} Performance</div>
+                     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                        {[1, 2, 3, 4, 5, 6, 7, 8].map(s => (
                                 <button key={s} onClick={async () => { 
                                     setSelectedSem(s); 
                                     const { data: remarks } = await supabase.from('academic_remarks').select('student_usn,semester,sgpa').in('student_usn', students.map(st=>st.usn));
@@ -496,56 +517,9 @@ function ClassesContent() {
                                 ))}
                             </div>
                            {semToppers.length > 5 && (
-                                <button onClick={() => setViewingList(viewingList?.title === `Sem ${selectedSem} Overall Rankings` ? null : { title: `Sem ${selectedSem} Overall Rankings`, type: semToppers[0]?.type || 'Score', data: semToppers })} style={{ ...btn('ghost'), marginTop: '12px', fontSize: '11px', fontWeight: 800 }}>
-                                    {viewingList?.title === `Sem ${selectedSem} Overall Rankings` ? 'Close List' : `View Full Ranked List (${semToppers.length} students)`}
+                                <button onClick={() => setViewingList({ title: `Sem ${selectedSem} Overall Rankings`, type: semToppers[0]?.type || 'Score', data: semToppers })} style={{ ...btn('ghost'), marginTop: '12px', fontSize: '11px', fontWeight: 800 }}>
+                                    View Full Ranked List ({semToppers.length} students)
                                 </button>
-                            )}
-
-                            {/* Inline Full List Rendering */}
-                            {viewingList && viewingList.title.includes(`Sem ${selectedSem} Overall`) && (
-                                <div style={{ marginTop: '20px', borderTop: '1px solid var(--border)', paddingTop: '20px' }} className="gf-fade-up">
-                                    <div style={{ overflowX: 'auto' }}>
-                                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                            <thead>
-                                                <tr>{['Rank', 'Name / USN', viewingList.type, 'Backlogs', 'Actions'].map(h => <th key={h} style={{ ...S.th, textAlign: h === 'Name / USN' ? 'left' : 'center' }}>{h}</th>)}</tr>
-                                            </thead>
-                                            <tbody>
-                                                {viewingList.data.map((r, i) => {
-                                                    const s = students.find(st => st.usn === r.usn) || {};
-                                                    const sc = scrapeStatus[r.usn];
-                                                    return (
-                                                        <tr key={r.usn} onClick={() => openStudentDrawer(r)} style={{ cursor: 'pointer' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-low)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                                                            <td style={{ ...S.td, fontSize: '11px', fontWeight: 800, color: 'var(--tx-dim)', textAlign: 'center' }}>#{i + 1}</td>
-                                                            <td style={{ ...S.td }}>
-                                                                <div style={{ fontWeight: 800, fontSize: '12px' }}>{r.name}</div>
-                                                                <div style={{ fontSize: '10px', color: 'var(--tx-muted)', fontFamily: 'monospace' }}>{r.usn}</div>
-                                                            </td>
-                                                            <td style={{ ...S.td, fontWeight: 900, color: 'var(--primary)', textAlign: 'center' }}>{viewingList.type === 'SGPA' ? r.score?.toFixed(2) : r.score}</td>
-                                                            <td style={{ ...S.td, textAlign: 'center' }}>
-                                                                <span style={{ fontWeight: 900, color: s.total_backlogs > 0 ? 'var(--red)' : 'var(--green)', background: s.total_backlogs > 0 ? 'var(--red-bg)' : 'var(--green-bg)', padding: '2px 8px', borderRadius: '5px', fontSize: '10px' }}>
-                                                                    {s.total_backlogs > 0 ? s.total_backlogs : 'Clear'}
-                                                                </span>
-                                                            </td>
-                                                            <td style={{ ...S.td, textAlign: 'center' }} onClick={e => e.stopPropagation()}>
-                                                                <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                                                                    <button onClick={() => scrapeStudent(r.usn)} style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface-low)', cursor: 'pointer' }} title="Fetch VTU">
-                                                                        <span className="material-icons-round" style={{ fontSize: '14px', color: 'var(--tx-dim)' }}>{sc === 'scraping' ? 'sync' : 'cloud_download'}</span>
-                                                                    </button>
-                                                                    <button onClick={(e) => openTransfer({ usn: r.usn, name: r.name }, e)} style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface-low)', cursor: 'pointer' }} title="Transfer">
-                                                                        <span className="material-icons-round" style={{ fontSize: '14px', color: 'var(--tx-dim)' }}>swap_horiz</span>
-                                                                    </button>
-                                                                    <button onClick={() => removeStudent(r.usn)} style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--red)', background: 'var(--red-bg)', cursor: 'pointer' }} title="Remove">
-                                                                        <span className="material-icons-round" style={{ fontSize: '14px', color: 'var(--red)' }}>remove_circle_outline</span>
-                                                                    </button>
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
                             )}
                         </div>
                     )}
@@ -565,30 +539,78 @@ function ClassesContent() {
                                                 <div style={{ fontSize: '12px', fontWeight: 900, color: i === 0 ? 'var(--primary)' : 'var(--tx-main)' }}>{r.total}</div>
                                             </div>
                                         ))}
-                                        <button onClick={() => setViewingList(viewingList?.title === `${t.code} - ${t.name}` ? null : { title: `${t.code} - ${t.name}`, type: 'Total Marks', showMarks: true, data: t.allScores.map(r => ({ usn: r.usn, name: r.name, score: r.total, internal: r.internal, external: r.external, grade: r.grade })) })} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: '11px', fontWeight: 800, padding: '8px 0 0 0', cursor: 'pointer', display: 'block', width: '100%', textAlign: 'center', borderTop: '1px dashed var(--border)', marginTop: '8px' }}>
-                                            {viewingList?.title === `${t.code} - ${t.name}` ? 'Close List' : 'View Full List'}
+                                        <button onClick={() => setViewingList({ title: `${t.code} - ${t.name}`, type: 'Total Marks', showMarks: true, data: t.allScores.map(r => ({ usn: r.usn, name: r.name, score: r.total, internal: r.internal, external: r.external, grade: r.grade })) })} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: '11px', fontWeight: 800, padding: '8px 0 0 0', cursor: 'pointer', display: 'block', width: '100%', textAlign: 'center', borderTop: '1px dashed var(--border)', marginTop: '8px' }}>
+                                            View Full List
                                         </button>
-                                        {viewingList && viewingList.title === `${t.code} - ${t.name}` && (
-                                            <div style={{ marginTop: '12px', borderTop: '1px solid var(--border)', paddingTop: '12px' }} className="gf-fade-up">
-                                                {viewingList.data.map((r, i) => {
-                                                    const isFail = ['F', 'A', 'X', 'NE', 'W'].includes(r.grade?.toUpperCase());
-                                                    return (
-                                                        <div key={r.usn} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0' }}>
-                                                            <div style={{ fontSize: '11px', color: 'var(--tx-muted)' }}>#{i + 1} {r.name}</div>
-                                                            <div style={{ fontSize: '11px', fontWeight: 800, color: isFail ? 'var(--red)' : 'var(--tx-main)' }}>{r.score} {r.grade}</div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        )}
                                     </div>
                                 ))}
                             </div>
                         </>
                     )}
                 </div>
-            )}
             </div>
+            )}
+
+            {classTab === 'roster' && (
+                <div className="gf-fade-up" style={{ ...S.card, padding: '0', overflow: 'hidden' }}>
+                    <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: 'var(--tx-main)' }}>Students</h3>
+                        <div style={{ fontSize: '12px', color: 'var(--tx-muted)' }}>{filteredStudents.length} Students</div>
+                    </div>
+                    {/* Semester Tabs */}
+                    <div style={{ padding: '12px 24px', borderBottom: '1px solid var(--border)', background: 'var(--surface-low)', display: 'flex', gap: '8px', overflowX: 'auto' }}>
+                        <button onClick={() => setSemFilter('all')} style={{ padding: '6px 16px', borderRadius: '16px', fontSize: '12px', fontWeight: 800, border: 'none', cursor: 'pointer', background: semFilter === 'all' ? 'var(--primary)' : 'var(--surface)', color: semFilter === 'all' ? 'var(--bg)' : 'var(--tx-dim)' }}>All Semesters</button>
+                        {[1, 2, 3, 4, 5, 6, 7, 8].map(s => (
+                             <button key={s} onClick={() => setSemFilter(s)} style={{ padding: '6px 16px', borderRadius: '16px', fontSize: '12px', fontWeight: 800, border: 'none', cursor: 'pointer', background: String(semFilter) === String(s) ? 'var(--primary)' : 'var(--surface)', color: String(semFilter) === String(s) ? 'var(--bg)' : 'var(--tx-dim)' }}>Sem {s}</button>
+                        ))}
+                    </div>
+                    <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                                <tr>
+                                    <th style={S.th}>USN</th>
+                                    <th style={S.th}>Name</th>
+                                    <th style={{ ...S.th, textAlign: 'center' }}>CGPA</th>
+                                    <th style={{ ...S.th, textAlign: 'center' }}>Backlogs</th>
+                                    <th style={{ ...S.th, textAlign: 'right' }}>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {[...filteredStudents].sort((a,b) => a.usn.localeCompare(b.usn)).map(s => {
+                                    const sc = scrapeStatus[s.usn];
+                                    return (
+                                        <tr key={s.usn} onClick={() => openStudentDrawer(s)} style={{ cursor: 'pointer' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-low)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                            <td style={{ ...S.td, fontFamily: 'monospace', color: 'var(--tx-muted)' }}>{s.usn}</td>
+                                            <td style={{ ...S.td }}>
+                                                <div style={{ fontWeight: 800 }}>{s.name}</div>
+                                            </td>
+                                            <td style={{ ...S.td, textAlign: 'center', fontWeight: s.cgpa ? 800 : 500, color: s.cgpa ? 'var(--primary)' : 'var(--tx-dim)' }}>{s.cgpa?.toFixed(2) || '—'}</td>
+                                            <td style={{ ...S.td, textAlign: 'center' }}>
+                                                {s.total_backlogs > 0 ? <span style={{ padding: '4px 8px', borderRadius: '6px', background: 'var(--red-bg)', color: 'var(--red)', fontSize: '10px', fontWeight: 900 }}>{s.total_backlogs}</span> : <span style={{ color: 'var(--tx-dim)', fontSize: '12px' }}>Clear</span>}
+                                            </td>
+                                            <td style={{ ...S.td, textAlign: 'right' }} onClick={e => e.stopPropagation()}>
+                                                <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                                                    <button onClick={() => scrapeStudent(s.usn)} style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface-low)', cursor: 'pointer' }} title="Fetch VTU">
+                                                        <span className="material-icons-round" style={{ fontSize: '14px', color: 'var(--tx-dim)' }}>{sc === 'scraping' ? 'sync' : 'cloud_download'}</span>
+                                                    </button>
+                                                    <button onClick={(e) => openTransfer(s, e)} style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface-low)', cursor: 'pointer' }} title="Transfer">
+                                                        <span className="material-icons-round" style={{ fontSize: '14px', color: 'var(--tx-dim)' }}>swap_horiz</span>
+                                                    </button>
+                                                    <button onClick={() => removeStudent(s.usn)} style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--red)', background: 'var(--red-bg)', cursor: 'pointer' }} title="Remove">
+                                                        <span className="material-icons-round" style={{ fontSize: '14px', color: 'var(--red)' }}>remove_circle_outline</span>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                                {filteredStudents.length === 0 && <tr><td colSpan="5" style={{ padding: '40px', textAlign: 'center', color: 'var(--tx-dim)', fontSize: '13px' }}>No students found.</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
 
 
             {/* ── Student Drawer ── */}
@@ -918,8 +940,8 @@ function ClassesContent() {
                 </div>
             </div>}
 
-            {/* Full List Modal (Only for Subjects/Specific Marks) */}
-            {viewingList && !viewingList.title.includes('Overall Rankings') && (
+            {/* Full List Modal */}
+            {viewingList && (
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }} onClick={() => setViewingList(null)}>
                     <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '16px', padding: '0', width: '100%', maxWidth: viewingList.showMarks ? '700px' : '500px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 48px rgba(0,0,0,0.4)' }} onClick={e => e.stopPropagation()}>
                         <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-low)' }}>
@@ -1014,14 +1036,7 @@ function ClassesContent() {
                                     </div>
                                 </div>
                                 {/* Card action buttons */}
-                                <div style={{ display: 'flex', gap: '6px', borderTop: '1px solid var(--border)', paddingTop: '12px' }}>
-                                    <button onClick={(e) => { e.stopPropagation(); setShowEditSem(cls); setEditSemVal(cls.semester); }} style={{ flex: 1, padding: '6px 10px', borderRadius: '8px', fontWeight: 700, fontSize: '11px', cursor: 'pointer', border: '1px solid var(--border)', fontFamily: 'inherit', background: 'var(--surface-low)', color: 'var(--tx-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-                                        <span className="material-icons-round" style={{ fontSize: '14px' }}>edit</span>Edit Sem
-                                    </button>
-                                    <button onClick={(e) => { e.stopPropagation(); if (confirm(`Delete class "${cls.name}"?`)) { fetch('/api/classes', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: cls.id }) }).then(() => fetchClasses()); } }} style={{ flex: 1, padding: '6px 10px', borderRadius: '8px', fontWeight: 700, fontSize: '11px', cursor: 'pointer', border: '1px solid var(--red, #ef4444)', fontFamily: 'inherit', background: 'var(--red-bg)', color: 'var(--red)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-                                        <span className="material-icons-round" style={{ fontSize: '14px' }}>delete</span>Remove
-                                    </button>
-                                </div>
+                                
                             </div>
                         ))}
                     </div>
