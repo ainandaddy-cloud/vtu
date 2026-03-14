@@ -43,6 +43,13 @@ const S = {
 const btn = (v = 'primary') => ({ padding: '10px 20px', borderRadius: '10px', fontWeight: 700, fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit', border: 'none', background: v === 'primary' ? 'var(--primary)' : v === 'danger' ? 'var(--red-bg)' : 'var(--surface-low)', color: v === 'primary' ? 'var(--bg)' : v === 'danger' ? 'var(--red)' : 'var(--tx-main)', ...(v !== 'primary' && { border: `1px solid ${v === 'danger' ? 'var(--red)' : 'var(--border)'}` }) });
 const msgBox = ok => ({ padding: '10px 16px', borderRadius: '10px', marginBottom: '16px', fontSize: '13px', fontWeight: 700, background: ok ? 'var(--green-bg)' : 'var(--surface-low)', color: ok ? 'var(--green)' : 'var(--tx-muted)', border: `1px solid ${ok ? 'var(--green)' : 'var(--border)'}` });
 
+const c = {
+    statGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '24px' },
+    statCard: { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '16px', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '4px' },
+    statLabel: { fontSize: '11px', fontWeight: 800, color: 'var(--tx-dim)', textTransform: 'uppercase', letterSpacing: '0.04em' },
+    statVal: { fontSize: '22px', fontWeight: 900, color: 'var(--tx-main)' },
+};
+
 // ── Parse any spreadsheet/CSV file → USN array ─────────────
 async function parseFileForUsns(file) {
     const ext = file.name.split('.').pop().toLowerCase();
