@@ -192,7 +192,13 @@ function ClassesContent() {
         setSemToppers(fullSem);
     };
 
-    const selectClass = cls => { setSelectedClass(cls); setMsg(''); setEditingName(false); fetchClassStudents(cls); };
+    const selectClass = cls => { 
+        setViewingList(null); // Clear any open lists from previous class
+        setSelectedClass(cls); 
+        setMsg(''); 
+        setEditingName(false); 
+        fetchClassStudents(cls); 
+    };
 
     const createClass = async () => {
         if (!newClass.name.trim()) { setMsg('Class name required.'); return; }
@@ -912,8 +918,8 @@ function ClassesContent() {
                 </div>
             </div>}
 
-            {/* Full List Modal */}
-            {viewingList && (
+            {/* Full List Modal (Only for Subjects/Specific Marks) */}
+            {viewingList && !viewingList.title.includes('Overall Rankings') && (
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }} onClick={() => setViewingList(null)}>
                     <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '16px', padding: '0', width: '100%', maxWidth: viewingList.showMarks ? '700px' : '500px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 48px rgba(0,0,0,0.4)' }} onClick={e => e.stopPropagation()}>
                         <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-low)' }}>
