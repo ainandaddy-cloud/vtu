@@ -70,6 +70,23 @@ function ReportsContent() {
         };
     }, []);
 
+    // ── Supabase paginated fetch (overcomes 1000-row default limit) ──
+    const fetchAllRows = async (table, selectCols, filterCol, filterValues, orderCol) => {
+        const PAGE = 1000;
+        let all = [];
+        let from = 0;
+        while (true) {
+            let q = supabase.from(table).select(selectCols).in(filterCol, filterValues).range(from, from + PAGE - 1);
+            if (orderCol) q = q.order(orderCol);
+            const { data, error } = await q;
+            if (error) break;
+            all = all.concat(data || []);
+            if (!data || data.length < PAGE) break;
+            from += PAGE;
+        }
+        return all;
+    };
+
     const loadReportData = async (facultyId) => {
         setLoading(true);
         try {
@@ -80,13 +97,10 @@ function ReportsContent() {
 
             const classIds = (classes || []).map(c => c.id);
 
-            // 2. Get all students in those classes
+            // 2. Get all students in those classes (paginated)
             let allUsns = [];
             if (classIds.length > 0) {
-                const { data: members } = await supabase
-                    .from('class_students')
-                    .select('usn, class_id')
-                    .in('class_id', classIds);
+                const members = await fetchAllRows('class_students', 'usn, class_id', 'class_id', classIds);
                 allUsns = [...new Set((members || []).map(m => m.usn))];
             }
 
@@ -111,17 +125,11 @@ function ReportsContent() {
                 return;
             }
 
-            // 4. Get scraped marks for all USNs
-            const { data: scrapedMarks } = await supabase
-                .from('subject_marks')
-                .select('grade, usn, semester, subject_name, credits, total')
-                .in('usn', allUsns);
+            // 4. Get scraped marks for all USNs (paginated — fixes 1000-row limit)
+            const scrapedMarks = await fetchAllRows('subject_marks', 'grade, usn, semester, subject_name, credits, total', 'usn', allUsns);
 
-            // 5. Get manual marks
-            const { data: students } = await supabase
-                .from('students')
-                .select('id, usn, name')
-                .in('usn', allUsns);
+            // 5. Get student profiles (paginated)
+            const students = await fetchAllRows('students', 'id, usn, name', 'usn', allUsns);
 
             const studentIdMap = {};
             const studentNameMap = {};
@@ -148,11 +156,8 @@ function ReportsContent() {
                 else if (ug === 'P') passes++;
             });
 
-            // 7. Top students by CGPA from academic_remarks
-            const { data: remarks } = await supabase
-                .from('academic_remarks')
-                .select('student_usn, sgpa, semester')
-                .in('student_usn', allUsns);
+            // 7. Top students by CGPA from academic_remarks (paginated)
+            const remarks = await fetchAllRows('academic_remarks', 'student_usn, sgpa, semester', 'student_usn', allUsns);
 
             const cgpaByUsn = {};
             if (remarks) {

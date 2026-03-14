@@ -134,8 +134,25 @@ function ClassesContent() {
         try { const r = await fetch('/api/classes'); const j = await r.json(); if (j.success) setClasses(j.classes || []); } finally { setLoadingClasses(false); }
     };
 
+    // ── Supabase paginated fetch (overcomes 1000-row default limit) ──
+    const fetchAllRows = async (table, selectCols, filterCol, filterValues, orderCol) => {
+        const PAGE = 1000;
+        let all = [];
+        let from = 0;
+        while (true) {
+            let q = supabase.from(table).select(selectCols).in(filterCol, filterValues).range(from, from + PAGE - 1);
+            if (orderCol) q = q.order(orderCol);
+            const { data, error } = await q;
+            if (error) break;
+            all = all.concat(data || []);
+            if (!data || data.length < PAGE) break;
+            from += PAGE;
+        }
+        return all;
+    };
+
     const fetchClassStudents = useCallback(async (cls) => {
-        setLoadingStudents(true); setStudents([]); setAllMarks([]); setSubjectToppers([]); setAvailableSems([]); setSemFilter('all');
+        setLoadingStudents(true); setStudents([]); setAllMarks([]); setSubjectToppers([]); setAvailableSems([]);
         try {
             const r = await fetch(`/api/class-students?class_id=${cls.id}`);
             const j = await r.json();
@@ -144,23 +161,21 @@ function ClassesContent() {
             setStudents(studs);
             if (studs.length > 0) {
                 const usns = studs.map(s => s.usn);
-                const { data: marks } = await supabase.from('subject_marks').select('usn,subject_code,subject_name,internal,external,total,grade,credits,passed,semester').in('usn', usns).order('semester');
+                // Paginated fetch — gets ALL marks, not just 1000
+                const marks = await fetchAllRows('subject_marks', 'usn,subject_code,subject_name,internal,external,total,grade,credits,passed,semester', 'usn', usns, 'semester');
                 if (marks?.length) {
                     setAllMarks(marks);
-                    // Derive available semesters from ACTUAL marks data — not from cls.semester
-                    // cls.semester is just the current sem label of the class, marks may span more
                     const semsInData = Array.from(new Set(marks.map(m => Number(m.semester)))).sort((a,b) => a-b);
-                    // Fill from 1 to the highest sem found in marks
                     const maxSem = semsInData[semsInData.length - 1];
                     const sems = Array.from({ length: maxSem }, (_, i) => i + 1);
                     setAvailableSems(sems);
                     const last = maxSem;
                     setSelectedSem(last);
                     
-                    const { data: remarks } = await supabase.from('academic_remarks').select('student_usn,semester,sgpa').in('student_usn', usns);
+                    // Also paginate remarks
+                    const remarks = await fetchAllRows('academic_remarks', 'student_usn,semester,sgpa', 'student_usn', usns);
                     computeToppers(marks, studs, last, remarks || []);
                 } else {
-                    // No marks yet — still set sems from cls.semester
                     const parsedSem = Number(cls.semester) || 1;
                     const sems = Array.from({ length: parsedSem }, (_, i) => i + 1);
                     setAvailableSems(sems);
@@ -518,7 +533,7 @@ function ClassesContent() {
                         {(availableSems.length > 0 ? availableSems : [1,2,3,4,5,6,7,8]).map(s => (
                                 <button key={s} onClick={async () => { 
                                     setSelectedSem(s); 
-                                    const { data: remarks } = await supabase.from('academic_remarks').select('student_usn,semester,sgpa').in('student_usn', students.map(st=>st.usn));
+                                    const remarks = await fetchAllRows('academic_remarks', 'student_usn,semester,sgpa', 'student_usn', students.map(st=>st.usn));
                                     computeToppers(allMarks, students, s, remarks || []); 
                                 }} style={{ padding: '6px 14px', borderRadius: '8px', fontWeight: 800, fontSize: '12px', cursor: 'pointer', border: 'none', fontFamily: 'inherit', background: Number(selectedSem) === Number(s) ? 'var(--primary)' : 'var(--surface-low)', color: Number(selectedSem) === Number(s) ? 'var(--bg)' : 'var(--tx-dim)' }}>Sem {s}</button>
                             ))}
@@ -577,14 +592,7 @@ function ClassesContent() {
                 <div className="gf-fade-up" style={{ ...S.card, padding: '0', overflow: 'hidden' }}>
                     <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: 'var(--tx-main)' }}>Students</h3>
-                        <div style={{ fontSize: '12px', color: 'var(--tx-muted)' }}>{filteredStudents.length} Students</div>
-                    </div>
-                    {/* Semester Tabs */}
-                    <div style={{ padding: '12px 24px', borderBottom: '1px solid var(--border)', background: 'var(--surface-low)', display: 'flex', gap: '8px', overflowX: 'auto' }}>
-                        <button onClick={() => setSemFilter('all')} style={{ padding: '6px 16px', borderRadius: '16px', fontSize: '12px', fontWeight: 800, border: 'none', cursor: 'pointer', background: semFilter === 'all' ? 'var(--primary)' : 'var(--surface)', color: semFilter === 'all' ? 'var(--bg)' : 'var(--tx-dim)' }}>All Semesters</button>
-                        {[1, 2, 3, 4, 5, 6, 7, 8].map(s => (
-                             <button key={s} onClick={() => setSemFilter(s)} style={{ padding: '6px 16px', borderRadius: '16px', fontSize: '12px', fontWeight: 800, border: 'none', cursor: 'pointer', background: String(semFilter) === String(s) ? 'var(--primary)' : 'var(--surface)', color: String(semFilter) === String(s) ? 'var(--bg)' : 'var(--tx-dim)' }}>Sem {s}</button>
-                        ))}
+                        <div style={{ fontSize: '12px', color: 'var(--tx-muted)' }}>{students.length} Students</div>
                     </div>
                     <div style={{ overflowX: 'auto' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -598,7 +606,7 @@ function ClassesContent() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {[...filteredStudents].sort((a,b) => a.usn.localeCompare(b.usn)).map(s => {
+                                {[...students].sort((a,b) => a.usn.localeCompare(b.usn)).map(s => {
                                     const sc = scrapeStatus[s.usn];
                                     return (
                                         <tr key={s.usn} onClick={() => openStudentDrawer(s)} style={{ cursor: 'pointer' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-low)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
@@ -626,7 +634,7 @@ function ClassesContent() {
                                         </tr>
                                     );
                                 })}
-                                {filteredStudents.length === 0 && <tr><td colSpan="5" style={{ padding: '40px', textAlign: 'center', color: 'var(--tx-dim)', fontSize: '13px' }}>No students found.</td></tr>}
+                                {students.length === 0 && <tr><td colSpan="5" style={{ padding: '40px', textAlign: 'center', color: 'var(--tx-dim)', fontSize: '13px' }}>No students found.</td></tr>}
                             </tbody>
                         </table>
                     </div>
