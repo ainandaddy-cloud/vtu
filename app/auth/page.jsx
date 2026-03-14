@@ -142,11 +142,6 @@ export default function PortalEntry() {
                 </div>
             </main>
 
-            <footer style={s.footer}>
-                <p style={s.footerText}>
-                    GradeFlow Academic Intelligence System &nbsp;&middot;&nbsp; All data is private and institution-bound.
-                </p>
-            </footer>
         </div>
     );
 }
