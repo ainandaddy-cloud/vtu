@@ -5,6 +5,21 @@ import { supabase } from '../../../lib/supabase';
 import { useRouter } from 'next/navigation';
 import AuthGuard from '../../../components/AuthGuard';
 
+// Helper to fetch all rows beyond 1000 (no filter version)
+async function fetchAllRows(table, select, orderCol = 'created_at', ascending = false) {
+    const PAGE = 1000;
+    let all = [];
+    let from = 0;
+    while (true) {
+        let { data, error } = await supabase.from(table).select(select).order(orderCol, { ascending }).range(from, from + PAGE - 1);
+        if (error) throw error;
+        all = all.concat(data || []);
+        if (!data || data.length < PAGE) break;
+        from += PAGE;
+    }
+    return all;
+}
+
 function AdminPanelContent() {
     const router = useRouter();
     const [tab, setTab] = useState('overview');
@@ -40,15 +55,19 @@ function AdminPanelContent() {
     const loadData = useCallback(async () => {
         setLoading(true);
         try {
-            const [{ data: studs, error: sErr }, { data: reqs, error: rErr }, { data: marksCount }, { data: logs }, { data: facultyList }] = await Promise.all([
-                supabase.from('students').select('*').order('created_at', { ascending: false }),
+            const [studs, { data: reqs, error: rErr }, { data: marksCount, error: mErr }, { data: logs, error: lErr }, { data: facultyList, error: fErr }] = await Promise.all([
+                fetchAllRows('students', '*', 'created_at', false),
                 supabase.from('faculty_onboarding').select('*').order('created_at', { ascending: false }),
                 supabase.from('marks').select('id', { count: 'exact', head: true }),
                 supabase.from('faculty_activity').select('*').order('created_at', { ascending: false }).limit(300),
                 supabase.from('faculty_onboarding').select('id, full_name, email, department'),
             ]);
-            if (sErr) console.error('Students fetch error:', sErr);
+            
             if (rErr) console.error('Requests fetch error:', rErr);
+            if (mErr) console.error('Marks count error:', mErr);
+            if (lErr) console.error('Logs fetch error:', lErr);
+            if (fErr) console.error('Faculty fetch error:', fErr);
+
             const s = studs || [], r = reqs || [], l = logs || [];
             // Enrich logs with faculty info
             const facultyMap = {};

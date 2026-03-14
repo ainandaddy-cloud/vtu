@@ -75,14 +75,35 @@ function ReportsContent() {
         const PAGE = 1000;
         let all = [];
         let from = 0;
-        while (true) {
-            let q = supabase.from(table).select(selectCols).in(filterCol, filterValues).range(from, from + PAGE - 1);
-            if (orderCol) q = q.order(orderCol);
-            const { data, error } = await q;
-            if (error) break;
-            all = all.concat(data || []);
-            if (!data || data.length < PAGE) break;
-            from += PAGE;
+
+        // If no filter values, just fetch all with pagination
+        if (!filterCol || !filterValues) {
+            while (true) {
+                let q = supabase.from(table).select(selectCols).range(from, from + PAGE - 1);
+                if (orderCol) q = q.order(orderCol);
+                const { data, error } = await q;
+                if (error) break;
+                all = all.concat(data || []);
+                if (!data || data.length < PAGE) break;
+                from += PAGE;
+            }
+            return all;
+        }
+
+        // If we have filter values, fetch in chunks to avoid URL length limits
+        const chunkSize = 200; // Chunk filter values to be safe with .in() limits
+        for (let i = 0; i < filterValues.length; i += chunkSize) {
+            const chunk = filterValues.slice(i, i + chunkSize);
+            let chunkFrom = 0;
+            while (true) {
+                let q = supabase.from(table).select(selectCols).in(filterCol, chunk).range(chunkFrom, chunkFrom + PAGE - 1);
+                if (orderCol) q = q.order(orderCol);
+                const { data, error } = await q;
+                if (error) break;
+                all = all.concat(data || []);
+                if (!data || data.length < PAGE) break;
+                chunkFrom += PAGE;
+            }
         }
         return all;
     };
@@ -90,34 +111,31 @@ function ReportsContent() {
     const loadReportData = async (facultyId) => {
         setLoading(true);
         try {
-            // 1. Get ALL classes owned by or visible to this faculty
+            // 1. Get ALL classes (for per-class pass rate stats)
             const { data: classes } = await supabase
                 .from('classes')
                 .select('id, name, branch, semester');
 
-            const classIds = (classes || []).map(c => c.id);
+            // 2. UNION ALL USNs from different sources to ensure no one is missed
+            // a) From Students table (paginated)
+            const allRegisteredStudents = await fetchAllRows('students', 'usn');
+            const studentsUsns = (allRegisteredStudents || []).map(s => s.usn);
 
-            // 2. Get all students in those classes (paginated)
-            let allUsns = [];
-            if (classIds.length > 0) {
-                const members = await fetchAllRows('class_students', 'usn, class_id', 'class_id', classIds);
-                allUsns = [...new Set((members || []).map(m => m.usn))];
+            // b) From Faculty Activity (paginated)
+            const actions = await fetchAllRows('faculty_activity', 'target_usn, created_at, action_type', 'faculty_id', [facultyId]);
+            const activityUsns = (actions || []).filter(a => a.target_usn).map(a => a.target_usn);
+            
+            setActivity((actions || []).sort((a,b)=>new Date(b.created_at) - new Date(a.created_at)).slice(0, 10));
+
+            // c) From Class Memberships (in case some aren't in students table yet)
+            let classMembersUsns = [];
+            if (classes?.length > 0) {
+                const members = await fetchAllRows('class_students', 'usn', 'class_id', classes.map(c => c.id));
+                classMembersUsns = (members || []).map(m => m.usn);
             }
 
-            // 3. Also add USNs from faculty_activity for this specific faculty
-            const { data: actions } = await supabase
-                .from('faculty_activity')
-                .select('target_usn, created_at, action_type')
-                .eq('faculty_id', facultyId)
-                .order('created_at', { ascending: false });
-
-            const activityUsns = (actions || [])
-                .filter(a => a.target_usn)
-                .map(a => a.target_usn);
-
-            allUsns = [...new Set([...allUsns, ...activityUsns])];
-
-            setActivity((actions || []).slice(0, 10));
+            // Combine into one master set
+            let allUsns = [...new Set([...studentsUsns, ...activityUsns, ...classMembersUsns])];
 
             if (allUsns.length === 0) {
                 setStats({ uniqueStudents: 0, totalSubjects: 0, passCount: 0, failCount: 0, absentCount: 0, gradeDist: {}, topStudents: [], classStats: [] });

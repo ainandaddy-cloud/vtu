@@ -70,6 +70,21 @@ function extractUsnsFromWorkbook(wb) {
         .filter(Boolean);
 }
 
+// Helper to fetch all rows beyond 1000
+const fetchAllRows = async (table, select, filterCol, filterValues) => {
+    const PAGE = 1000;
+    let all = [];
+    let from = 0;
+    while (true) {
+        let { data, error } = await supabase.from(table).select(select).in(filterCol, filterValues).range(from, from + PAGE - 1);
+        if (error) throw error;
+        all = all.concat(data || []);
+        if (!data || data.length < PAGE) break;
+        from += PAGE;
+    }
+    return all;
+};
+
 // ══════════════════════════════════════════════════════════
 function ClassesContent() {
     const [faculty, setFaculty] = useState(null);
@@ -136,7 +151,7 @@ function ClassesContent() {
             setStudents(studs);
             if (studs.length > 0) {
                 const usns = studs.map(s => s.usn);
-                const { data: marks } = await supabase.from('subject_marks').select('usn,subject_code,subject_name,total,semester').in('usn', usns).order('semester');
+                const marks = await fetchAllRows('subject_marks', 'usn,subject_code,subject_name,total,semester', 'usn', usns);
                 if (marks?.length) {
                     setAllMarks(marks);
                     const parsedSem = Number(cls.semester) || 1;
@@ -145,7 +160,7 @@ function ClassesContent() {
                     const last = sems[sems.length - 1];
                     setSelectedSem(last);
                     
-                    const { data: remarks } = await supabase.from('academic_remarks').select('student_usn,semester,sgpa').in('student_usn', usns);
+                    const remarks = await fetchAllRows('academic_remarks', 'student_usn,semester,sgpa', 'student_usn', usns);
                     computeToppers(marks, studs, last, remarks || []);
                 }
             }
@@ -453,7 +468,7 @@ function ClassesContent() {
                             {availableSems.map(s => (
                                 <button key={s} onClick={async () => { 
                                     setSelectedSem(s); 
-                                    const { data: remarks } = await supabase.from('academic_remarks').select('student_usn,semester,sgpa').in('student_usn', students.map(st=>st.usn));
+                                    const remarks = await fetchAllRows('academic_remarks', 'student_usn,semester,sgpa', 'student_usn', students.map(st=>st.usn));
                                     computeToppers(allMarks, students, s, remarks || []); 
                                 }} style={{ padding: '4px 12px', borderRadius: '8px', fontWeight: 800, fontSize: '11px', cursor: 'pointer', border: 'none', fontFamily: 'inherit', background: selectedSem === s ? 'var(--primary)' : 'var(--surface-low)', color: selectedSem === s ? 'var(--bg)' : 'var(--tx-dim)' }}>Sem {s}</button>
                             ))}

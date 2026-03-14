@@ -166,10 +166,11 @@ function ClassesContent() {
                 if (marks?.length) {
                     setAllMarks(marks);
                     const semsInData = Array.from(new Set(marks.map(m => Number(m.semester)))).sort((a,b) => a-b);
-                    const maxSem = semsInData[semsInData.length - 1];
+                    const maxSemInData = semsInData[semsInData.length - 1] || 0;
+                    const maxSem = Math.max(maxSemInData, Number(cls.semester) || 1);
                     const sems = Array.from({ length: maxSem }, (_, i) => i + 1);
                     setAvailableSems(sems);
-                    const last = maxSem;
+                    const last = Number(cls.semester) || maxSem || 1;
                     setSelectedSem(last);
                     
                     // Also paginate remarks

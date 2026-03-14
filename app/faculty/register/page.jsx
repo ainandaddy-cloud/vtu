@@ -5,7 +5,7 @@ import { supabase } from '../../../lib/supabase';
 import Link from 'next/link';
 
 export default function FacultyRegister() {
-    const [form, setForm] = useState({ full_name: '', email: '', department: '', employee_id: '', role_description: '' });
+    const [form, setForm] = useState({ full_name: '', email: '', department: '', password: '' });
     const [loading, setLoading] = useState(false);
     const [submitted, setSubmitted] = useState(false);
     const [error, setError] = useState('');
@@ -20,8 +20,7 @@ export default function FacultyRegister() {
                 full_name: form.full_name,
                 email: form.email.toLowerCase(),
                 department: form.department,
-                employee_id: form.employee_id,
-                role_description: form.role_description,
+                password: form.password,
                 status: 'pending',
             });
             if (insertErr) {
@@ -152,21 +151,13 @@ export default function FacultyRegister() {
                         onFocus={e => e.target.style.borderColor = 'var(--tx-main)'}
                         onBlur={e => e.target.style.borderColor = 'var(--border)'} />
 
-                    <label style={s.label}>Employee ID</label>
-                    <input style={s.input} placeholder="FAC-2024-001" value={form.employee_id}
-                        onChange={handleChange('employee_id')} required
+                    <label style={s.label}>Account Password</label>
+                    <input style={s.input} type="password" placeholder="••••••••" value={form.password}
+                        onChange={handleChange('password')} required
                         onFocus={e => e.target.style.borderColor = 'var(--tx-main)'}
                         onBlur={e => e.target.style.borderColor = 'var(--border)'} />
 
                     <div style={s.divider} />
-
-                    <label style={s.label}>Tell us about your role</label>
-                    <textarea style={s.textarea}
-                        placeholder="I teach 3rd and 4th semester students. I'm looking to track student marks and generate performance reports for my department."
-                        value={form.role_description}
-                        onChange={handleChange('role_description')}
-                        onFocus={e => e.target.style.borderColor = 'var(--tx-main)'}
-                        onBlur={e => e.target.style.borderColor = 'var(--border)'} />
 
                     <button style={s.btn} type="submit" disabled={loading}>
                         {loading ? 'Submitting...' : 'Submit Request'}

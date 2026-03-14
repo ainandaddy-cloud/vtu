@@ -7,7 +7,7 @@ import Link from 'next/link';
 
 export default function FacultyLogin() {
     const [email, setEmail] = useState('');
-    const [accessKey, setAccessKey] = useState('');
+    const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const router = useRouter();
@@ -28,8 +28,8 @@ export default function FacultyLogin() {
                 return;
             }
 
-            if (faculty.generated_access_key !== accessKey) {
-                setError('The access key is incorrect.');
+            if (faculty.password !== password) {
+                setError('The password you entered is incorrect.');
                 return;
             }
 
@@ -132,7 +132,7 @@ export default function FacultyLogin() {
 
                 <h1 style={s.heading}>Faculty sign in.</h1>
                 <p style={s.subtext}>
-                    Use your institutional email and the access key we sent when your request was approved.
+                    Use your institutional email and the password you set during registration.
                 </p>
 
                 {error && <div style={s.errorBox}>{error}</div>}
@@ -144,9 +144,9 @@ export default function FacultyLogin() {
                         onFocus={e => e.target.style.borderColor = 'var(--tx-main)'}
                         onBlur={e => e.target.style.borderColor = 'var(--border)'} />
 
-                    <label style={s.label}>Access Key</label>
-                    <input style={s.input} type="password" placeholder="Key from your approval email"
-                        value={accessKey} onChange={e => setAccessKey(e.target.value)} required
+                    <label style={s.label}>Password</label>
+                    <input style={s.input} type="password" placeholder="••••••••"
+                        value={password} onChange={e => setPassword(e.target.value)} required
                         onFocus={e => e.target.style.borderColor = 'var(--tx-main)'}
                         onBlur={e => e.target.style.borderColor = 'var(--border)'} />
 
