@@ -940,38 +940,45 @@ function ClassesContent() {
                 </div>
             </div>}
 
-            {/* Full List Modal */}
+            {/* Full List Drawer */}
             {viewingList && (
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }} onClick={() => setViewingList(null)}>
-                    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '16px', padding: '0', width: '100%', maxWidth: viewingList.showMarks ? '700px' : '500px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 48px rgba(0,0,0,0.4)' }} onClick={e => e.stopPropagation()}>
-                        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-low)' }}>
-                            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: 'var(--tx-main)' }}>{viewingList.title}</h3>
-                            <button onClick={() => setViewingList(null)} style={{ background: 'none', border: 'none', color: 'var(--tx-muted)', cursor: 'pointer', padding: '4px' }}>✕</button>
+                <>
+                    <div style={{...S.overlay, zIndex: 2000}} onClick={() => setViewingList(null)} />
+                    <div style={{...S.drawer, zIndex: 2010, padding: '32px 24px', maxWidth: '800px'}} className="gf-fade-up">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--border)', paddingBottom: '16px', marginBottom: '8px' }}>
+                            <div>
+                                <h3 style={{ margin: '0 0 4px 0', fontSize: '18px', fontWeight: 900, color: 'var(--tx-main)', letterSpacing: '-0.02em' }}>{viewingList.title}</h3>
+                                <p style={{ margin: 0, fontSize: '12px', color: 'var(--tx-muted)' }}>{viewingList.data.length} Students</p>
+                            </div>
+                            <button onClick={() => setViewingList(null)} style={{ background: 'var(--surface-low)', border: 'none', borderRadius: '50%', color: 'var(--tx-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px' }}>
+                                <span className="material-icons-round" style={{ fontSize: '18px' }}>close</span>
+                            </button>
                         </div>
-                        <div style={{ overflowY: 'auto', flex: 1, padding: '0 24px' }}>
+                        
+                        <div style={{ overflowX: 'auto', flex: 1 }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                <thead style={{ position: 'sticky', top: 0, background: 'var(--surface)' }}>
+                                <thead>
                                     <tr>
-                                        <th style={{ padding: '12px 8px', textAlign: 'left', fontSize: '11px', color: 'var(--tx-dim)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border)', width: '40px' }}>Rank</th>
-                                        <th style={{ padding: '12px 8px', textAlign: 'left', fontSize: '11px', color: 'var(--tx-dim)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border)' }}>Student</th>
+                                        <th style={{ padding: '12px 8px', textAlign: 'left', fontSize: '10px', color: 'var(--tx-dim)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border)', width: '40px' }}>Rank</th>
+                                        <th style={{ padding: '12px 8px', textAlign: 'left', fontSize: '10px', color: 'var(--tx-dim)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border)' }}>Student</th>
                                         {viewingList.showMarks && <>
-                                            <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '11px', color: 'var(--tx-dim)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>CIE</th>
-                                            <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '11px', color: 'var(--tx-dim)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>SEE</th>
+                                            <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '10px', color: 'var(--tx-dim)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>CIE</th>
+                                            <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '10px', color: 'var(--tx-dim)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>SEE</th>
                                         </>}
-                                        <th style={{ padding: '12px 8px', textAlign: 'right', fontSize: '11px', color: 'var(--tx-dim)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border)' }}>{viewingList.type}</th>
-                                        {viewingList.showMarks && <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '11px', color: 'var(--tx-dim)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>Result</th>}
+                                        <th style={{ padding: '12px 8px', textAlign: 'right', fontSize: '10px', color: 'var(--tx-dim)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border)' }}>{viewingList.type}</th>
+                                        {viewingList.showMarks && <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '10px', color: 'var(--tx-dim)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>Result</th>}
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {viewingList.data.map((r, i) => {
-                                        const isFail = r.grade && ['F', 'A', 'X', 'NE', 'W'].includes(r.grade);
-                                        const gradeLabel = r.grade === 'A' ? 'A (Absent)' : r.grade === 'X' ? 'X (Not Eligible)' : r.grade === 'NE' ? 'NE' : r.grade === 'W' ? 'W (Withheld)' : r.grade === 'F' ? 'FAIL' : r.grade === 'P' ? 'PASS' : r.grade || '';
+                                        const isFail = r.grade && ['F', 'A', 'X', 'NE', 'W', 'FAIL'].includes(r.grade);
+                                        const gradeLabel = r.grade === 'A' ? 'A (Absent)' : r.grade === 'X' ? 'X (Not Eligible)' : r.grade === 'NE' ? 'NE' : r.grade === 'W' ? 'W (Withheld)' : r.grade === 'F' ? 'FAIL' : r.grade === 'P' ? 'PASS' : r.grade || '—';
                                         return (
-                                            <tr key={r.usn + i}>
-                                                <td style={{ padding: '12px 8px', borderBottom: '1px solid var(--border)', fontSize: '12px', fontWeight: 800, color: 'var(--tx-dim)' }}>#{i + 1} {MEDALS[i] || ''}</td>
+                                            <tr key={r.usn + i} style={{ transition: 'background 0.2s', ...((i % 2 === 0) ? { background: 'var(--surface-low)' } : {}) }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg)'} onMouseLeave={e => e.currentTarget.style.background = (i % 2 === 0) ? 'var(--surface-low)' : 'transparent'}>
+                                                <td style={{ padding: '12px 8px', borderBottom: '1px solid var(--border)', fontSize: '11px', fontWeight: 800, color: 'var(--tx-dim)' }}>#{i + 1} {MEDALS[i] || ''}</td>
                                                 <td style={{ padding: '12px 8px', borderBottom: '1px solid var(--border)' }}>
                                                     <div style={{ fontSize: '13px', fontWeight: 800, color: isFail ? 'var(--red)' : 'var(--tx-main)' }}>{r.name}</div>
-                                                    <div style={{ fontSize: '11px', color: 'var(--tx-muted)' }}>{r.usn}</div>
+                                                    <div style={{ fontSize: '11px', color: 'var(--tx-muted)', fontFamily: 'monospace' }}>{r.usn}</div>
                                                 </td>
                                                 {viewingList.showMarks && <>
                                                     <td style={{ padding: '12px 8px', borderBottom: '1px solid var(--border)', textAlign: 'center', fontSize: '12px', color: 'var(--tx-muted)' }}>{r.internal ?? '—'}</td>
@@ -979,7 +986,7 @@ function ClassesContent() {
                                                 </>}
                                                 <td style={{ padding: '12px 8px', borderBottom: '1px solid var(--border)', textAlign: 'right', fontSize: '13px', fontWeight: 900, color: isFail ? 'var(--red)' : 'var(--primary)' }}>{viewingList.type === 'SGPA' ? r.score?.toFixed(2) : r.score}</td>
                                                 {viewingList.showMarks && <td style={{ padding: '12px 8px', borderBottom: '1px solid var(--border)', textAlign: 'center' }}>
-                                                    <span style={{ padding: '3px 8px', borderRadius: '6px', fontWeight: 800, fontSize: '10px', background: isFail ? 'var(--red-bg)' : 'var(--green-bg)', color: isFail ? 'var(--red)' : 'var(--green)' }}>{gradeLabel}</span>
+                                                    <span style={{ padding: '4px 10px', borderRadius: '12px', fontWeight: 900, fontSize: '10px', border: `1px solid ${isFail ? 'var(--red)' : 'var(--green)'}`, background: isFail ? 'var(--red-bg)' : 'var(--green-bg)', color: isFail ? 'var(--red)' : 'var(--green)' }}>{gradeLabel}</span>
                                                 </td>}
                                             </tr>
                                         );
@@ -988,7 +995,7 @@ function ClassesContent() {
                             </table>
                         </div>
                     </div>
-                </div>
+                </>
             )}
 
         </div>
