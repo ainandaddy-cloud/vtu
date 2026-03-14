@@ -147,21 +147,33 @@ function ClassesContent() {
                 const { data: marks } = await supabase.from('subject_marks').select('usn,subject_code,subject_name,internal,external,total,grade,credits,passed,semester').in('usn', usns).order('semester');
                 if (marks?.length) {
                     setAllMarks(marks);
-                    const parsedSem = Number(cls.semester) || 1;
-                    const sems = Array.from({ length: parsedSem }, (_, i) => i + 1);
+                    // Derive available semesters from ACTUAL marks data — not from cls.semester
+                    // cls.semester is just the current sem label of the class, marks may span more
+                    const semsInData = Array.from(new Set(marks.map(m => Number(m.semester)))).sort((a,b) => a-b);
+                    // Fill from 1 to the highest sem found in marks
+                    const maxSem = semsInData[semsInData.length - 1];
+                    const sems = Array.from({ length: maxSem }, (_, i) => i + 1);
                     setAvailableSems(sems);
-                    const last = sems[sems.length - 1];
+                    const last = maxSem;
                     setSelectedSem(last);
                     
                     const { data: remarks } = await supabase.from('academic_remarks').select('student_usn,semester,sgpa').in('student_usn', usns);
                     computeToppers(marks, studs, last, remarks || []);
+                } else {
+                    // No marks yet — still set sems from cls.semester
+                    const parsedSem = Number(cls.semester) || 1;
+                    const sems = Array.from({ length: parsedSem }, (_, i) => i + 1);
+                    setAvailableSems(sems);
+                    setSelectedSem(parsedSem);
                 }
             }
         } finally { setLoadingStudents(false); }
     }, []);
 
     const computeToppers = (marks, studs, sem, remarks = null) => {
-        const filtered = marks.filter(m => m.semester === sem);
+        // Always compare as numbers to prevent string vs int mismatches
+        const semNum = Number(sem);
+        const filtered = marks.filter(m => Number(m.semester) === semNum);
         const bySubj = {};
         const byStudent = {};
         
@@ -190,12 +202,13 @@ function ClassesContent() {
         
         setSubjectToppers(result);
 
-        // Compute Semester Toppers (Top 5 & Full List)
+        // Compute Semester Toppers — prefer SGPA from academic_remarks, fall back to raw marks sum
         let fullSem = [];
-        if (remarks && remarks.some(r => r.semester === sem && r.sgpa !== null)) {
+        const semRemarks = (remarks || []).filter(r => Number(r.semester) === semNum && r.sgpa !== null);
+        if (semRemarks.length > 0) {
             fullSem = studs.map(s => {
-                const r = remarks.find(x => x.student_usn === s.usn && x.semester === sem && x.sgpa !== null);
-                return { usn: s.usn, name: s.name, score: r ? r.sgpa : 0, type: 'SGPA' };
+                const r = semRemarks.find(x => x.student_usn === s.usn);
+                return { usn: s.usn, name: s.name, score: r ? parseFloat(r.sgpa) : 0, type: 'SGPA' };
             }).sort((a, b) => b.score - a.score);
         } else {
             fullSem = studs.map(s => ({
@@ -381,7 +394,16 @@ function ClassesContent() {
     };
 
     // ── Derived data ──────────────────────────────────────────
-    const filteredStudents = semFilter === 'all' ? students : students.filter(s => String(s.semester) === String(semFilter));
+    // Build a set of USNs that have marks in the selected roster semester
+    // (Student profile 'semester' field just stores their current year level, not which marks they have)
+    const usnsInSemFilter = semFilter === 'all'
+        ? new Set(students.map(s => s.usn))
+        : new Set(allMarks.filter(m => Number(m.semester) === Number(semFilter)).map(m => m.usn));
+
+    const filteredStudents = semFilter === 'all'
+        ? students
+        : students.filter(s => usnsInSemFilter.has(s.usn));
+
     const top10 = [...students].filter(s => s.cgpa !== null).sort((a, b) => b.cgpa - a.cgpa).slice(0, 10);
     const totalBacklogs = students.reduce((s, st) => s + (st.total_backlogs || 0), 0);
     const withCgpa = students.filter(s => s.cgpa !== null);
@@ -493,12 +515,12 @@ function ClassesContent() {
                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
                      <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--tx-main)' }}>📚 Semester {selectedSem} Performance</div>
                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                        {[1, 2, 3, 4, 5, 6, 7, 8].map(s => (
+                        {(availableSems.length > 0 ? availableSems : [1,2,3,4,5,6,7,8]).map(s => (
                                 <button key={s} onClick={async () => { 
                                     setSelectedSem(s); 
                                     const { data: remarks } = await supabase.from('academic_remarks').select('student_usn,semester,sgpa').in('student_usn', students.map(st=>st.usn));
                                     computeToppers(allMarks, students, s, remarks || []); 
-                                }} style={{ padding: '6px 14px', borderRadius: '8px', fontWeight: 800, fontSize: '12px', cursor: 'pointer', border: 'none', fontFamily: 'inherit', background: selectedSem === s ? 'var(--primary)' : 'var(--surface-low)', color: selectedSem === s ? 'var(--bg)' : 'var(--tx-dim)' }}>Sem {s}</button>
+                                }} style={{ padding: '6px 14px', borderRadius: '8px', fontWeight: 800, fontSize: '12px', cursor: 'pointer', border: 'none', fontFamily: 'inherit', background: Number(selectedSem) === Number(s) ? 'var(--primary)' : 'var(--surface-low)', color: Number(selectedSem) === Number(s) ? 'var(--bg)' : 'var(--tx-dim)' }}>Sem {s}</button>
                             ))}
                         </div>
                     </div>
