@@ -4,6 +4,20 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../../lib/supabase';
 import AuthGuard from '../../../components/AuthGuard';
 
+// ── Activity Logger ─────────────────────────────────────────
+async function logActivity(faculty, action_type, target = null) {
+    if (!faculty?.id) return;
+    try {
+        await supabase.from('faculty_activity').insert({
+            faculty_id: faculty.id,
+            faculty_name: faculty.full_name || faculty.name || faculty.email || 'Faculty',
+            action_type,
+            target_usn: target || null,
+            sync_status: 'SUCCESS',
+        });
+    } catch { /* non-blocking */ }
+}
+
 function ReportsContent() {
     const [faculty, setFaculty] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -198,6 +212,13 @@ function ReportsContent() {
         }
     };
 
+    const handleViewStudent = async (usn) => {
+        // Log the view action
+        await logActivity(faculty, 'VIEW_REPORT_STUDENT', usn);
+        // We could also open a drawer here, but user asked for activity update
+        // The recent activity log will refresh automatically due to the real-time subscription
+    };
+
     const c = {
         page: { padding: 'var(--page-py) var(--page-px)', maxWidth: '1200px', margin: '0 auto', fontFamily: "'Plus Jakarta Sans', sans-serif" },
         eyebrow: { fontSize: '11px', fontWeight: 700, color: 'var(--tx-dim)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '6px' },
@@ -323,7 +344,7 @@ function ReportsContent() {
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                             {stats.topStudents.map((s, i) => (
-                                <div key={s.usn} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'var(--surface-low)', borderRadius: '12px' }}>
+                                <div key={s.usn} onClick={() => handleViewStudent(s.usn)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'var(--surface-low)', borderRadius: '12px', cursor: 'pointer', border: '1px solid transparent', transition: 'all 0.2s' }} className="gf-hover-lift">
                                     <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: i === 0 ? '#F59E0B' : i === 1 ? '#9CA3AF' : i === 2 ? '#B45309' : 'var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '12px', color: i < 3 ? 'white' : 'var(--tx-dim)', flexShrink: 0 }}>
                                         {i + 1}
                                     </div>

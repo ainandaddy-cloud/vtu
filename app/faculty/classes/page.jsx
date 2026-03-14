@@ -91,6 +91,8 @@ function ClassesContent() {
     const [loadingDrawer, setLoadingDrawer] = useState(false);
     const [editingName, setEditingName] = useState(false);
     const [editName, setEditName] = useState('');
+    const [showEditSem, setShowEditSem] = useState(null);
+    const [editSemVal, setEditSemVal] = useState(1);
     const [showCreate, setShowCreate] = useState(false);
     const [showAddModal, setShowAddModal] = useState(false);   // unified add students modal
     const [addTab, setAddTab] = useState('single');             // 'single' | 'paste' | 'file'
@@ -135,7 +137,7 @@ function ClassesContent() {
             setStudents(studs);
             if (studs.length > 0) {
                 const usns = studs.map(s => s.usn);
-                const { data: marks } = await supabase.from('subject_marks').select('usn,subject_code,subject_name,total,semester').in('usn', usns).order('semester');
+                const { data: marks } = await supabase.from('subject_marks').select('usn,subject_code,subject_name,internal,external,total,grade,credits,passed,semester').in('usn', usns).order('semester');
                 if (marks?.length) {
                     setAllMarks(marks);
                     const parsedSem = Number(cls.semester) || 1;
@@ -169,7 +171,7 @@ function ClassesContent() {
         const result = Object.entries(bySubj).map(([code, rows]) => ({
             code,
             name: rows[0].subject_name || code,
-            allScores: rows.sort((a, b) => b.total - a.total).map(r => ({ usn: r.usn, name: nameMap[r.usn] || r.usn, total: r.total }))
+            allScores: rows.sort((a, b) => b.total - a.total).map(r => ({ usn: r.usn, name: nameMap[r.usn] || r.usn, total: r.total, internal: r.internal, external: r.external, grade: r.grade }))
         })).sort((a, b) => a.code.localeCompare(b.code));
         setSubjectToppers(result);
 
@@ -198,6 +200,17 @@ function ClassesContent() {
         const r = await fetch('/api/classes', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: selectedClass.id, name: editName }) });
         const j = await r.json();
         if (j.success) { setSelectedClass(p => ({ ...p, name: editName })); setClasses(prev => prev.map(c => c.id === selectedClass.id ? { ...c, name: editName } : c)); setEditingName(false); }
+    };
+
+    const updateClassSem = async (classId, newSem) => {
+        const r = await fetch('/api/classes', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: classId, semester: newSem }) });
+        const j = await r.json();
+        if (j.success) {
+            setClasses(prev => prev.map(c => c.id === classId ? { ...c, semester: newSem } : c));
+            if (selectedClass?.id === classId) setSelectedClass(p => ({ ...p, semester: newSem }));
+            setShowEditSem(null);
+            setMsg('✓ Semester updated.');
+        }
     };
 
     const deleteClass = async id => {
@@ -421,7 +434,7 @@ function ClassesContent() {
 
             {/* Sub-Tabs */}
             <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '1px solid var(--border)', paddingBottom: '16px' }}>
-                <button onClick={() => setClassTab('roster')} style={{ padding: '8px 16px', borderRadius: '8px', fontWeight: 800, fontSize: '13px', cursor: 'pointer', border: 'none', fontFamily: 'inherit', background: classTab === 'roster' ? 'var(--primary)' : 'transparent', color: classTab === 'roster' ? 'var(--bg)' : 'var(--tx-muted)' }}>Student Roster</button>
+                <button onClick={() => setClassTab('roster')} style={{ padding: '8px 16px', borderRadius: '8px', fontWeight: 800, fontSize: '13px', cursor: 'pointer', border: 'none', fontFamily: 'inherit', background: classTab === 'roster' ? 'var(--primary)' : 'transparent', color: classTab === 'roster' ? 'var(--bg)' : 'var(--tx-muted)' }}>Students</button>
                 <button onClick={() => setClassTab('analytics')} style={{ padding: '8px 16px', borderRadius: '8px', fontWeight: 800, fontSize: '13px', cursor: 'pointer', border: 'none', fontFamily: 'inherit', background: classTab === 'analytics' ? 'var(--primary)' : 'transparent', color: classTab === 'analytics' ? 'var(--bg)' : 'var(--tx-muted)' }}>Class Analytics & Rankings</button>
             </div>
 
@@ -493,7 +506,7 @@ function ClassesContent() {
                                                 <div style={{ fontSize: '12px', fontWeight: 900, color: i === 0 ? 'var(--primary)' : 'var(--tx-main)' }}>{r.total}</div>
                                             </div>
                                         ))}
-                                        <button onClick={() => setViewingList({ title: `${t.code} - ${t.name}`, type: 'Total Marks', data: t.allScores.map(r => ({ usn: r.usn, name: r.name, score: r.total })) })} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: '11px', fontWeight: 800, padding: '8px 0 0 0', cursor: 'pointer', display: 'block', width: '100%', textAlign: 'center', borderTop: '1px dashed var(--border)', marginTop: '8px' }}>View Full List</button>
+                                        <button onClick={() => setViewingList({ title: `${t.code} - ${t.name}`, type: 'Total Marks', showMarks: true, data: t.allScores.map(r => ({ usn: r.usn, name: r.name, score: r.total, internal: r.internal, external: r.external, grade: r.grade })) })} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: '11px', fontWeight: 800, padding: '8px 0 0 0', cursor: 'pointer', display: 'block', width: '100%', textAlign: 'center', borderTop: '1px dashed var(--border)', marginTop: '8px' }}>View Full List</button>
                                     </div>
                                 ))}
                             </div>
@@ -509,7 +522,7 @@ function ClassesContent() {
 
             {/* Semester filter tabs */}
             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '16px' }}>
-                {['all', ...availableSems].map(s => (
+                {['all', 1, 2, 3, 4, 5, 6, 7, 8].map(s => (
                     <button key={s} onClick={() => setSemFilter(String(s))} style={{ padding: '6px 14px', borderRadius: '8px', fontWeight: 700, fontSize: '12px', cursor: 'pointer', border: `1px solid ${String(semFilter) === String(s) ? 'var(--primary)' : 'var(--border)'}`, fontFamily: 'inherit', background: String(semFilter) === String(s) ? 'var(--primary)' : 'var(--surface-low)', color: String(semFilter) === String(s) ? 'var(--bg)' : 'var(--tx-muted)' }}>
                         {s === 'all' ? 'All Students' : `Sem ${s}`}
                     </button>
@@ -519,7 +532,7 @@ function ClassesContent() {
             {/* Roster */}
             <div style={{ ...S.card, padding: 0, overflow: 'hidden' }}>
                 <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--tx-main)' }}>Student Roster</div>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--tx-main)' }}>Students</div>
                     <div style={{ fontSize: '11px', color: 'var(--tx-dim)' }}>{filteredStudents.length} students</div>
                 </div>
                 {loadingStudents ? <div style={{ padding: '48px', textAlign: 'center', color: 'var(--tx-dim)' }}>Loading…</div>
@@ -602,18 +615,48 @@ function ClassesContent() {
                         </div>
                         {loadingDrawer ? <div style={{ textAlign: 'center', padding: '40px', color: 'var(--tx-dim)' }}>Loading marks…</div>
                             : Object.keys(groupedDrawerMarks).length === 0 ? <div style={{ textAlign: 'center', padding: '40px', color: 'var(--tx-dim)' }}>No marks synced yet. Click "Fetch VTU" to load data.</div>
-                                : Object.entries(groupedDrawerMarks).sort(([a], [b]) => a - b).map(([sem, marks]) => (
+                                : Object.entries(groupedDrawerMarks).sort(([a], [b]) => a - b).map(([sem, marks]) => {
+                                    // Proper SGPA calculation using VTU marks-based grade points
+                                    const excludeGrades = new Set(['PP', 'NP', 'W', 'DX', 'AU', 'X', 'NE']);
+                                    let tc = 0, tcp = 0;
+                                    marks.forEach(m => {
+                                        const g = (m.grade || 'F').toUpperCase();
+                                        if (excludeGrades.has(g)) return;
+                                        const cr = m.credits || 3;
+                                        let gp = 0;
+                                        const unified = ['O','S','A+','B+','B','C','P','PASS'].includes(g) ? 'P' : g;
+                                        if (unified === 'P') {
+                                            const tot = m.total || 0;
+                                            if (tot >= 90) gp = 10;
+                                            else if (tot >= 80) gp = 9;
+                                            else if (tot >= 70) gp = 8;
+                                            else if (tot >= 60) gp = 7;
+                                            else if (tot >= 55) gp = 6;
+                                            else if (tot >= 50) gp = 5;
+                                            else if (tot >= 40) gp = 4;
+                                        }
+                                        tc += cr;
+                                        tcp += gp * cr;
+                                    });
+                                    const sgpa = tc > 0 ? (tcp / tc).toFixed(2) : '—';
+                                    return (
                                     <div key={sem}>
                                         <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--tx-main)', marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
                                             <span>Semester {sem}</span>
-                                            <span style={{ fontSize: '11px', color: 'var(--tx-dim)', fontWeight: 600 }}>
-                                                {(() => { let pts = 0, cr = 0; marks.forEach(m => { const c = m.credits || 3; const g = { O: 10, S: 10, 'A+': 9, A: 8, 'B+': 7, B: 6, C: 5, P: 4, F: 0, Ab: 0 }; pts += (g[m.grade] || 0) * c; cr += c; }); return cr > 0 ? `SGPA ${(pts / cr).toFixed(2)}` : ''; })()}
+                                            <span style={{ fontSize: '11px', color: 'var(--primary)', fontWeight: 700 }}>
+                                                {tc > 0 ? `SGPA ${sgpa}` : ''}
                                             </span>
                                         </div>
                                         <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden', marginBottom: '20px' }}>
                                             <thead><tr>{['Subject', 'CIE', 'SEE', 'Total', 'Grade'].map(h => <th key={h} style={{ ...S.th, padding: '8px 14px' }}>{h}</th>)}</tr></thead>
                                             <tbody>
-                                                {marks.map(m => (
+                                                {marks.map(m => {
+                                                    const g = (m.grade || 'F').toUpperCase();
+                                                    const isFail = ['F', 'A', 'X', 'NE', 'W'].includes(g);
+                                                    const gradeLabel = g === 'A' ? 'A' : g === 'X' ? 'X' : g === 'NE' ? 'NE' : g === 'W' ? 'W' : g === 'F' ? 'F' : 'P';
+                                                    const gradeColor = g === 'A' || g === 'X' || g === 'NE' ? '#6b7280' : isFail ? 'var(--red)' : 'var(--green)';
+                                                    const gradeBg = g === 'A' || g === 'X' || g === 'NE' ? 'rgba(107,114,128,0.15)' : isFail ? 'var(--red-bg)' : 'var(--green-bg)';
+                                                    return (
                                                     <tr key={m.id || m.subject_code}>
                                                         <td style={{ ...S.td, padding: '10px 14px' }}>
                                                             <div style={{ fontWeight: 700, fontSize: '12px' }}>{m.subject_name}</div>
@@ -623,14 +666,16 @@ function ClassesContent() {
                                                         <td style={{ ...S.td, textAlign: 'center', padding: '10px 14px' }}>{m.external ?? m.see_marks ?? '—'}</td>
                                                         <td style={{ ...S.td, textAlign: 'center', fontWeight: 800, padding: '10px 14px' }}>{m.total ?? m.total_marks ?? '—'}</td>
                                                         <td style={{ ...S.td, textAlign: 'center', padding: '10px 14px' }}>
-                                                            <span style={{ padding: '3px 8px', borderRadius: '6px', fontWeight: 800, fontSize: '11px', background: m.grade === 'F' ? 'var(--red-bg)' : 'var(--green-bg)', color: m.grade === 'F' ? 'var(--red)' : 'var(--green)' }}>{m.grade}</span>
+                                                            <span style={{ padding: '3px 8px', borderRadius: '6px', fontWeight: 800, fontSize: '11px', background: gradeBg, color: gradeColor }}>{gradeLabel}</span>
                                                         </td>
                                                     </tr>
-                                                ))}
+                                                    );
+                                                })}
                                             </tbody>
                                         </table>
                                     </div>
-                                ))}
+                                    );
+                                })}
                     </div>
                 </>
             )}
@@ -869,7 +914,7 @@ function ClassesContent() {
             {/* Full List Modal */}
             {viewingList && (
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }} onClick={() => setViewingList(null)}>
-                    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '16px', padding: '0', width: '100%', maxWidth: '500px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 48px rgba(0,0,0,0.4)' }} onClick={e => e.stopPropagation()}>
+                    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '16px', padding: '0', width: '100%', maxWidth: viewingList.showMarks ? '700px' : '500px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 48px rgba(0,0,0,0.4)' }} onClick={e => e.stopPropagation()}>
                         <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-low)' }}>
                             <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: 'var(--tx-main)' }}>{viewingList.title}</h3>
                             <button onClick={() => setViewingList(null)} style={{ background: 'none', border: 'none', color: 'var(--tx-muted)', cursor: 'pointer', padding: '4px' }}>✕</button>
@@ -880,20 +925,36 @@ function ClassesContent() {
                                     <tr>
                                         <th style={{ padding: '12px 8px', textAlign: 'left', fontSize: '11px', color: 'var(--tx-dim)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border)', width: '40px' }}>Rank</th>
                                         <th style={{ padding: '12px 8px', textAlign: 'left', fontSize: '11px', color: 'var(--tx-dim)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border)' }}>Student</th>
+                                        {viewingList.showMarks && <>
+                                            <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '11px', color: 'var(--tx-dim)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>CIE</th>
+                                            <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '11px', color: 'var(--tx-dim)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>SEE</th>
+                                        </>}
                                         <th style={{ padding: '12px 8px', textAlign: 'right', fontSize: '11px', color: 'var(--tx-dim)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border)' }}>{viewingList.type}</th>
+                                        {viewingList.showMarks && <th style={{ padding: '12px 8px', textAlign: 'center', fontSize: '11px', color: 'var(--tx-dim)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>Result</th>}
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {viewingList.data.map((r, i) => (
-                                        <tr key={r.usn}>
-                                            <td style={{ padding: '12px 8px', borderBottom: '1px solid var(--border)', fontSize: '12px', fontWeight: 800, color: 'var(--tx-dim)' }}>#{i + 1} {MEDALS[i] || ''}</td>
-                                            <td style={{ padding: '12px 8px', borderBottom: '1px solid var(--border)' }}>
-                                                <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--tx-main)' }}>{r.name}</div>
-                                                <div style={{ fontSize: '11px', color: 'var(--tx-muted)' }}>{r.usn}</div>
-                                            </td>
-                                            <td style={{ padding: '12px 8px', borderBottom: '1px solid var(--border)', textAlign: 'right', fontSize: '13px', fontWeight: 900, color: 'var(--primary)' }}>{viewingList.type === 'SGPA' ? r.score?.toFixed(2) : r.score}</td>
-                                        </tr>
-                                    ))}
+                                    {viewingList.data.map((r, i) => {
+                                        const isFail = r.grade && ['F', 'A', 'X', 'NE', 'W'].includes(r.grade);
+                                        const gradeLabel = r.grade === 'A' ? 'A (Absent)' : r.grade === 'X' ? 'X (Not Eligible)' : r.grade === 'NE' ? 'NE' : r.grade === 'W' ? 'W (Withheld)' : r.grade === 'F' ? 'FAIL' : r.grade === 'P' ? 'PASS' : r.grade || '';
+                                        return (
+                                            <tr key={r.usn + i}>
+                                                <td style={{ padding: '12px 8px', borderBottom: '1px solid var(--border)', fontSize: '12px', fontWeight: 800, color: 'var(--tx-dim)' }}>#{i + 1} {MEDALS[i] || ''}</td>
+                                                <td style={{ padding: '12px 8px', borderBottom: '1px solid var(--border)' }}>
+                                                    <div style={{ fontSize: '13px', fontWeight: 800, color: isFail ? 'var(--red)' : 'var(--tx-main)' }}>{r.name}</div>
+                                                    <div style={{ fontSize: '11px', color: 'var(--tx-muted)' }}>{r.usn}</div>
+                                                </td>
+                                                {viewingList.showMarks && <>
+                                                    <td style={{ padding: '12px 8px', borderBottom: '1px solid var(--border)', textAlign: 'center', fontSize: '12px', color: 'var(--tx-muted)' }}>{r.internal ?? '—'}</td>
+                                                    <td style={{ padding: '12px 8px', borderBottom: '1px solid var(--border)', textAlign: 'center', fontSize: '12px', color: 'var(--tx-muted)' }}>{r.external ?? '—'}</td>
+                                                </>}
+                                                <td style={{ padding: '12px 8px', borderBottom: '1px solid var(--border)', textAlign: 'right', fontSize: '13px', fontWeight: 900, color: isFail ? 'var(--red)' : 'var(--primary)' }}>{viewingList.type === 'SGPA' ? r.score?.toFixed(2) : r.score}</td>
+                                                {viewingList.showMarks && <td style={{ padding: '12px 8px', borderBottom: '1px solid var(--border)', textAlign: 'center' }}>
+                                                    <span style={{ padding: '3px 8px', borderRadius: '6px', fontWeight: 800, fontSize: '10px', background: isFail ? 'var(--red-bg)' : 'var(--green-bg)', color: isFail ? 'var(--red)' : 'var(--green)' }}>{gradeLabel}</span>
+                                                </td>}
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>
@@ -930,18 +991,29 @@ function ClassesContent() {
                 ) : (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '16px' }}>
                         {classes.map(cls => (
-                            <div key={cls.id} onClick={() => selectClass(cls)} className="gf-hover-lift" style={{ ...S.card, cursor: 'pointer', transition: 'transform 0.2s,box-shadow 0.2s' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-                                    <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: 'var(--surface-low)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        <span className="material-icons-round" style={{ fontSize: '22px', color: 'var(--tx-dim)' }}>groups</span>
+                            <div key={cls.id} className="gf-hover-lift" style={{ ...S.card, cursor: 'pointer', transition: 'transform 0.2s,box-shadow 0.2s', position: 'relative' }}>
+                                <div onClick={() => selectClass(cls)} style={{ marginBottom: '16px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                                        <div style={{ width: '44px', height: '44px', borderRadius: '12px', background: 'var(--surface-low)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            <span className="material-icons-round" style={{ fontSize: '22px', color: 'var(--tx-dim)' }}>groups</span>
+                                        </div>
+                                        <div style={{ fontSize: '10px', fontWeight: 800, color: 'var(--tx-dim)', background: 'var(--surface-low)', padding: '3px 10px', borderRadius: '6px' }}>Sem {cls.semester}</div>
                                     </div>
-                                    <div style={{ fontSize: '10px', fontWeight: 800, color: 'var(--tx-dim)', background: 'var(--surface-low)', padding: '3px 10px', borderRadius: '6px' }}>Sem {cls.semester}</div>
+                                    <div style={{ fontSize: '17px', fontWeight: 900, color: 'var(--tx-main)', letterSpacing: '-0.02em', marginBottom: '4px' }}>{cls.name}</div>
+                                    <div style={{ fontSize: '12px', color: 'var(--tx-muted)', marginBottom: '20px' }}>{cls.branch} · {cls.scheme} Scheme</div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--tx-main)' }}>{cls.student_count ?? 0} <span style={{ fontWeight: 500, color: 'var(--tx-dim)' }}>students</span></div>
+                                        <span className="material-icons-round" style={{ fontSize: '18px', color: 'var(--tx-dim)' }}>arrow_forward</span>
+                                    </div>
                                 </div>
-                                <div style={{ fontSize: '17px', fontWeight: 900, color: 'var(--tx-main)', letterSpacing: '-0.02em', marginBottom: '4px' }}>{cls.name}</div>
-                                <div style={{ fontSize: '12px', color: 'var(--tx-muted)', marginBottom: '20px' }}>{cls.branch} · {cls.scheme} Scheme</div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--tx-main)' }}>{cls.student_count ?? 0} <span style={{ fontWeight: 500, color: 'var(--tx-dim)' }}>students</span></div>
-                                    <span className="material-icons-round" style={{ fontSize: '18px', color: 'var(--tx-dim)' }}>arrow_forward</span>
+                                {/* Card action buttons */}
+                                <div style={{ display: 'flex', gap: '6px', borderTop: '1px solid var(--border)', paddingTop: '12px' }}>
+                                    <button onClick={(e) => { e.stopPropagation(); setShowEditSem(cls); setEditSemVal(cls.semester); }} style={{ flex: 1, padding: '6px 10px', borderRadius: '8px', fontWeight: 700, fontSize: '11px', cursor: 'pointer', border: '1px solid var(--border)', fontFamily: 'inherit', background: 'var(--surface-low)', color: 'var(--tx-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                                        <span className="material-icons-round" style={{ fontSize: '14px' }}>edit</span>Edit Sem
+                                    </button>
+                                    <button onClick={(e) => { e.stopPropagation(); if (confirm(`Delete class "${cls.name}"?`)) { fetch('/api/classes', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: cls.id }) }).then(() => fetchClasses()); } }} style={{ flex: 1, padding: '6px 10px', borderRadius: '8px', fontWeight: 700, fontSize: '11px', cursor: 'pointer', border: '1px solid var(--red, #ef4444)', fontFamily: 'inherit', background: 'var(--red-bg)', color: 'var(--red)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                                        <span className="material-icons-round" style={{ fontSize: '14px' }}>delete</span>Remove
+                                    </button>
                                 </div>
                             </div>
                         ))}
@@ -977,6 +1049,24 @@ function ClassesContent() {
                         </div>
                     </div>
                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}><button style={btn('ghost')} onClick={() => setShowCreate(false)}>Cancel</button><button style={btn('primary')} onClick={createClass}>Create Class</button></div>
+                </div>
+            </div>}
+
+            {/* Edit Semester Modal */}
+            {showEditSem && <div style={S.modal} onClick={() => setShowEditSem(null)}>
+                <div style={S.mbox('360px')} onClick={e => e.stopPropagation()} className="gf-fade-up">
+                    <h3 style={{ fontSize: '18px', fontWeight: 900, color: 'var(--tx-main)', marginBottom: '4px' }}>Edit Semester</h3>
+                    <p style={{ fontSize: '13px', color: 'var(--tx-muted)', marginBottom: '8px' }}>{showEditSem.name}</p>
+                    <div>
+                        <label style={S.label}>Semester</label>
+                        <select style={S.sel} value={editSemVal} onChange={e => setEditSemVal(parseInt(e.target.value))}>
+                            {[1, 2, 3, 4, 5, 6, 7, 8].map(s => <option key={s} value={s}>Semester {s}</option>)}
+                        </select>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                        <button style={btn('ghost')} onClick={() => setShowEditSem(null)}>Cancel</button>
+                        <button style={btn('primary')} onClick={() => updateClassSem(showEditSem.id, editSemVal)}>Update Semester</button>
+                    </div>
                 </div>
             </div>}
         </div>

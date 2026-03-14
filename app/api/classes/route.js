@@ -48,15 +48,21 @@ export async function POST(req) {
     }
 }
 
-// PUT — rename a class
+// PUT — update a class (name, semester, etc.)
 export async function PUT(req) {
     try {
-        const { id, name } = await req.json();
-        if (!id || !name?.trim()) return NextResponse.json({ error: 'id and name required.' }, { status: 400 });
+        const { id, name, semester } = await req.json();
+        if (!id) return NextResponse.json({ error: 'id required.' }, { status: 400 });
+
+        const updates = {};
+        if (name?.trim()) updates.name = name.trim();
+        if (semester !== undefined && semester !== null) updates.semester = parseInt(semester);
+
+        if (Object.keys(updates).length === 0) return NextResponse.json({ error: 'Nothing to update.' }, { status: 400 });
 
         const { data, error } = await supabase
             .from('classes')
-            .update({ name: name.trim() })
+            .update(updates)
             .eq('id', id)
             .select()
             .single();
@@ -65,7 +71,7 @@ export async function PUT(req) {
         return NextResponse.json({ success: true, class: data });
     } catch (err) {
         console.error('[PUT /api/classes]', err);
-        return NextResponse.json({ error: 'Failed to rename class.' }, { status: 500 });
+        return NextResponse.json({ error: 'Failed to update class.' }, { status: 500 });
     }
 }
 
