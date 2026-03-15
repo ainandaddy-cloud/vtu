@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '../../../lib/supabase';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
 export const dynamic = 'force-dynamic';
 
@@ -9,7 +15,7 @@ async function fetchAllRows(table, select, filterCol, filterValues) {
     let all = [];
     let from = 0;
     while (true) {
-        let { data, error } = await supabase.from(table).select(select).in(filterCol, filterValues).range(from, from + PAGE - 1);
+        let { data, error } = await supabaseAdmin.from(table).select(select).in(filterCol, filterValues).range(from, from + PAGE - 1);
         if (error) throw error;
         all = all.concat(data || []);
         if (!data || data.length < PAGE) break;
@@ -123,7 +129,7 @@ export async function POST(req) {
         if (toInsert.length > 0) {
             // chunk the insert just in case, using upsert to avoid chunk failure
             for (let i = 0; i < toInsert.length; i += 100) {
-                await supabase.from('students')
+                await supabaseAdmin.from('students')
                     .upsert(toInsert.slice(i, i + 100), { onConflict: 'usn', ignoreDuplicates: true })
                     .catch(() => { });
             }
@@ -133,7 +139,7 @@ export async function POST(req) {
         let addedCount = 0;
 
         for (let i = 0; i < rows.length; i += 100) {
-            const { data, error } = await supabase
+            const { data, error } = await supabaseAdmin
                 .from('class_students')
                 .upsert(rows.slice(i, i + 100), { onConflict: 'class_id,usn', ignoreDuplicates: true })
                 .select();
@@ -154,7 +160,7 @@ export async function DELETE(req) {
         const { class_id, usn } = await req.json();
         if (!class_id || !usn) return NextResponse.json({ error: 'class_id and usn required.' }, { status: 400 });
 
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from('class_students')
             .delete()
             .eq('class_id', class_id)

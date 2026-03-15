@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '../../../lib/supabase';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
 export const dynamic = 'force-dynamic';
 
@@ -9,7 +15,7 @@ async function fetchAllRows(table, select, orderCol = 'created_at', ascending = 
     let all = [];
     let from = 0;
     while (true) {
-        let { data, error } = await supabase.from(table).select(select).order(orderCol, { ascending }).range(from, from + PAGE - 1);
+        let { data, error } = await supabaseAdmin.from(table).select(select).order(orderCol, { ascending }).range(from, from + PAGE - 1);
         if (error) throw error;
         all = all.concat(data || []);
         if (!data || data.length < PAGE) break;
@@ -44,7 +50,7 @@ export async function POST(req) {
             return NextResponse.json({ error: 'name, branch, semester, and faculty_id are required.' }, { status: 400 });
         }
 
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('classes')
             .insert({ name, branch, semester: parseInt(semester), scheme: scheme || '2022', faculty_id })
             .select()
@@ -70,7 +76,7 @@ export async function PUT(req) {
 
         if (Object.keys(updates).length === 0) return NextResponse.json({ error: 'Nothing to update.' }, { status: 400 });
 
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('classes')
             .update(updates)
             .eq('id', id)
@@ -92,7 +98,7 @@ export async function DELETE(req) {
         const { id } = await req.json();
         if (!id) return NextResponse.json({ error: 'Class ID required.' }, { status: 400 });
 
-        const { error } = await supabase.from('classes').delete().eq('id', id);
+        const { error } = await supabaseAdmin.from('classes').delete().eq('id', id);
         if (error) throw error;
 
         return NextResponse.json({ success: true });
