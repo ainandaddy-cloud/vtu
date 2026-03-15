@@ -174,6 +174,26 @@ function AdminPanelContent() {
         }
     };
 
+    const deleteStudentEntirely = async () => {
+        if (!selectedStudent) return;
+        if (!confirm(`⚠️ PERMANENTLY DELETE student ${selectedStudent.name || selectedStudent.usn} from the entire database?\n\nThis removes ALL their data: marks, profile, class enrollments.\nThis CANNOT be undone.`)) return;
+        
+        try {
+            const r = await fetch('/api/admin/delete-student', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ usn: selectedStudent.usn }) });
+            const j = await r.json();
+            if (j.success) {
+                setSelectedStudent(null);
+                alert(`✓ Student ${selectedStudent.usn} permanently deleted.`);
+                await loadData();
+            } else {
+                alert(j.error || 'Failed to delete student.');
+            }
+        } catch (err) {
+            console.error('Delete error:', err);
+            alert('❌ Failed to delete student.');
+        }
+    };
+
     const copyKey = (key) => {
         navigator.clipboard.writeText(key);
         setCopiedKey(key);
@@ -623,6 +643,18 @@ function AdminPanelContent() {
                             <p style={{ fontSize: '13px', color: 'var(--tx-muted)', marginBottom: '16px', lineHeight: 1.6 }}>
                                 Administrator access is secured with encrypted credentials and role-based access control.
                             </p>
+                            
+                            <div style={{ background: 'var(--surface-low)', border: '1px solid var(--border)', borderRadius: '12px', padding: '16px', marginBottom: '20px' }}>
+                                <label style={{ fontSize: '10px', fontWeight: 800, color: 'var(--tx-dim)', textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>System Access Token</label>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <code style={{ fontSize: '15px', fontWeight: 800, color: 'var(--primary)', letterSpacing: '0.05em' }}>GF-ADMIN-PROD</code>
+                                    <button onClick={() => copyKey('GF-ADMIN-PROD')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tx-dim)' }}>
+                                        <span className="material-icons-round" style={{ fontSize: '18px' }}>{copiedKey === 'GF-ADMIN-PROD' ? 'check' : 'content_copy'}</span>
+                                    </button>
+                                </div>
+                                <div style={{ fontSize: '10px', color: 'var(--tx-muted)', marginTop: '8px' }}>Use this code at the Gateway to authenticate.</div>
+                            </div>
+
                             <div style={{ display: 'flex', gap: '8px' }}>
                                 <button style={c.actionBtn(false)} onClick={() => loadData()}>
                                     <span className="material-icons-round" style={{ fontSize: '14px', verticalAlign: 'middle', marginRight: '4px' }}>refresh</span>
@@ -651,10 +683,14 @@ function AdminPanelContent() {
                                     <div style={{ fontSize: '11px', color: 'var(--tx-dim)', marginTop: '4px' }}>
                                         Status: <span style={c.badge(selectedStudent.activated_at ? 'active' : 'pending')}>{selectedStudent.activated_at ? 'Activated' : 'Pending'}</span>
                                     </div>
-                                    <div style={{ marginTop: '12px' }}>
+                                    <div style={{ marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                         <button style={{ ...c.actionBtn(false), padding: '6px 12px', fontSize: '10px', borderColor: 'var(--amber)', color: 'var(--amber)', background: 'var(--amber-bg)' }} onClick={resetStudentCredentials}>
                                             <span className="material-icons-round" style={{ fontSize: '12px', verticalAlign: 'middle', marginRight: '4px' }}>lock_reset</span>
                                             Reset Password
+                                        </button>
+                                        <button style={{ ...c.actionBtn(false), padding: '6px 12px', fontSize: '10px', borderColor: 'var(--red)', color: 'var(--red)', background: 'var(--red-bg)' }} onClick={deleteStudentEntirely}>
+                                            <span className="material-icons-round" style={{ fontSize: '12px', verticalAlign: 'middle', marginRight: '4px' }}>delete_forever</span>
+                                            Delete Student
                                         </button>
                                     </div>
                                 </div>

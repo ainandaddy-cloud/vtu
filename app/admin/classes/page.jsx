@@ -37,7 +37,7 @@ const S = {
     td: { padding: '13px 16px', borderBottom: '1px solid var(--border)', fontSize: '12px', fontWeight: 600, color: 'var(--tx-main)' },
     modal: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(12px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' },
     mbox: (w = '480px') => ({ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '24px', width: '100%', maxWidth: w, padding: '32px', display: 'flex', flexDirection: 'column', gap: '20px', maxHeight: '90vh', overflowY: 'auto' }),
-    drawer: { position: 'fixed', top: 0, right: 0, bottom: 0, width: '100%', maxWidth: '720px', background: 'var(--surface)', borderLeft: '1px solid var(--border)', zIndex: 1100, overflowY: 'auto', padding: '40px clamp(24px,4vw,48px)', display: 'flex', flexDirection: 'column', gap: '24px', boxShadow: '-20px 0 60px rgba(0,0,0,0.08)' },
+    drawer: { position: 'fixed', top: 0, right: 0, bottom: 0, width: '100%', maxWidth: '720px', background: 'var(--surface)', borderLeft: '1px solid var(--border)', zIndex: 1100, overflowY: 'hidden', padding: '40px clamp(24px,4vw,48px)', display: 'flex', flexDirection: 'column', gap: '24px', boxShadow: '-20px 0 60px rgba(0,0,0,0.08)' },
     overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(4px)', zIndex: 1050 },
 };
 const btn = (v = 'primary') => ({ padding: '10px 20px', borderRadius: '10px', fontWeight: 700, fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit', border: 'none', background: v === 'primary' ? 'var(--primary)' : v === 'danger' ? 'var(--red-bg)' : 'var(--surface-low)', color: v === 'primary' ? 'var(--bg)' : v === 'danger' ? 'var(--red)' : 'var(--tx-main)', ...(v !== 'primary' && { border: `1px solid ${v === 'danger' ? 'var(--red)' : 'var(--border)'}` }) });
@@ -70,17 +70,15 @@ function extractUsnsFromWorkbook(wb) {
         .filter(Boolean);
 }
 
-// Helper to fetch all rows beyond 1000
+// Helper to fetch without PostgREST limits by chunking the filterValues
 const fetchAllRows = async (table, select, filterCol, filterValues) => {
-    const PAGE = 1000;
     let all = [];
-    let from = 0;
-    while (true) {
-        let { data, error } = await supabase.from(table).select(select).in(filterCol, filterValues).range(from, from + PAGE - 1);
+    const CHUNK_SIZE = 15; // 15 USNs per request to avoid URL length & row limits
+    for (let i = 0; i < filterValues.length; i += CHUNK_SIZE) {
+        const chunk = filterValues.slice(i, i + CHUNK_SIZE);
+        const { data, error } = await supabase.from(table).select(select).in(filterCol, chunk);
         if (error) throw error;
         all = all.concat(data || []);
-        if (!data || data.length < PAGE) break;
-        from += PAGE;
     }
     return all;
 };
@@ -128,6 +126,7 @@ function ClassesContent() {
     const [transferMode, setTransferMode] = useState('move');       // 'move' | 'copy'
     const [transferTarget, setTransferTarget] = useState('');       // destination class id
     const [transferLoading, setTransferLoading] = useState(false);
+    const [drawerTab, setDrawerTab] = useState('marks'); // 'marks' | 'backlogs'
     const fileRef = useRef(null);
 
     useEffect(() => {
@@ -302,9 +301,31 @@ function ClassesContent() {
     };
 
     const openStudentDrawer = async s => {
-        setOpenStudent(s); setLoadingDrawer(true); setDrawerScrapeStatus('');
+        setOpenStudent(s); setLoadingDrawer(true); setDrawerScrapeStatus(''); setDrawerTab('marks');
         const { data: marks } = await supabase.from('subject_marks').select('*').eq('usn', s.usn).order('semester');
         setStudentMarks(marks || []); setLoadingDrawer(false);
+    };
+
+    const resetPassword = async () => {
+        if (!openStudent) return;
+        if (!confirm(`Reset credentials for ${openStudent.name || openStudent.usn}? They will need to activate again.`)) return;
+        const { error } = await supabase.from('students').update({ password_hash: null, recovery_pin: null }).eq('usn', openStudent.usn);
+        if (error) alert('Failed to reset.');
+        else alert('✓ Reset successful. Student must re-activate.');
+    };
+
+    const deleteStudentEntirely = async (usn, name) => {
+        if (!confirm(`⚠️ PERMANENTLY DELETE student ${name || usn} from the entire database?\n\nThis removes ALL their data: marks, profile, class enrollments.\nThis CANNOT be undone.`)) return;
+        const r = await fetch('/api/admin/delete-student', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ usn }) });
+        const j = await r.json();
+        if (j.success) {
+            setOpenStudent(null);
+            setStudents(p => p.filter(s => s.usn !== usn));
+            setMsg(`✓ Student ${usn} permanently deleted.`);
+            fetchClasses();
+        } else {
+            setMsg(j.error || 'Failed to delete student.');
+        }
     };
 
     const scrapeInDrawer = async () => {
@@ -593,60 +614,122 @@ function ClassesContent() {
                     <div style={S.overlay} onClick={() => setOpenStudent(null)} />
                     <div style={S.drawer} className="gf-fade-up">
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                <div style={{ width: '56px', height: '56px', borderRadius: '14px', background: 'var(--surface-low)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: 900, color: 'var(--tx-muted)', flexShrink: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                                <div style={{ width: '64px', height: '64px', borderRadius: '16px', background: 'var(--surface-low)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', fontWeight: 900, color: 'var(--tx-muted)', flexShrink: 0 }}>
                                     {(openStudent.name || openStudent.usn || '?')[0].toUpperCase()}
                                 </div>
                                 <div>
-                                    <h2 style={{ fontSize: '20px', fontWeight: 900, color: 'var(--tx-main)', letterSpacing: '-0.03em' }}>{openStudent.name}</h2>
-                                    <div style={{ fontSize: '12px', fontFamily: 'monospace', color: 'var(--tx-muted)' }}>{openStudent.usn} · {openStudent.branch || '—'} · Sem {openStudent.semester || '—'}</div>
-                                    <div style={{ display: 'flex', gap: '12px', marginTop: '8px', flexWrap: 'wrap' }}>
-                                        {openStudent.cgpa != null && <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--primary)' }}>CGPA {openStudent.cgpa?.toFixed(2)}</span>}
-                                        <span style={{ fontSize: '12px', fontWeight: 700, color: openStudent.total_backlogs > 0 ? 'var(--red)' : 'var(--green)' }}>{openStudent.total_backlogs > 0 ? `${openStudent.total_backlogs} Backlogs` : 'All Clear ✓'}</span>
+                                    <h2 style={{ fontSize: '24px', fontWeight: 900, color: 'var(--tx-main)', letterSpacing: '-0.04em' }}>{openStudent.name || 'Student'}</h2>
+                                    <div style={{ fontSize: '13px', color: 'var(--tx-muted)', fontFamily: 'monospace' }}>
+                                        {openStudent.usn} · {openStudent.branch || 'Unassigned'} · Sem {openStudent.semester || '—'}
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
+                                        <button style={{ ...btn('ghost'), padding: '6px 12px', fontSize: '11px', borderColor: 'var(--amber)', color: 'var(--amber)', background: 'var(--amber-bg)' }} onClick={resetPassword}>
+                                            <span className="material-icons-round" style={{ fontSize: '14px', verticalAlign: 'middle', marginRight: '4px' }}>lock_reset</span>
+                                            Reset Password
+                                        </button>
+                                        <button style={{ ...btn('ghost'), padding: '6px 12px', fontSize: '11px', borderColor: 'var(--red)', color: 'var(--red)', background: 'var(--red-bg)' }} onClick={() => deleteStudentEntirely(openStudent.usn, openStudent.name)}>
+                                            <span className="material-icons-round" style={{ fontSize: '14px', verticalAlign: 'middle', marginRight: '4px' }}>delete_forever</span>
+                                            Delete Student
+                                        </button>
                                     </div>
                                 </div>
                             </div>
                             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                <button onClick={scrapeInDrawer} disabled={drawerScrapeStatus === 'scraping'} style={btn(drawerScrapeStatus === 'queued' ? 'ghost' : 'ghost')}>
+                                <button onClick={scrapeInDrawer} disabled={drawerScrapeStatus === 'scraping'} style={btn('ghost')}>
                                     <span className="material-icons-round" style={{ fontSize: '14px', verticalAlign: 'middle', marginRight: '4px' }}>refresh</span>
-                                    {drawerScrapeStatus === 'scraping' ? 'Fetching…' : drawerScrapeStatus === 'queued' ? 'Queued ✓' : 'Fetch VTU'}
+                                    {drawerScrapeStatus === 'scraping' ? 'Fetching…' : 'Fetch VTU'}
                                 </button>
                                 <button onClick={() => setOpenStudent(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tx-muted)' }}>
-                                    <span className="material-icons-round" style={{ fontSize: '26px' }}>close</span>
+                                    <span className="material-icons-round" style={{ fontSize: '28px' }}>close</span>
                                 </button>
                             </div>
                         </div>
-                        {loadingDrawer ? <div style={{ textAlign: 'center', padding: '40px', color: 'var(--tx-dim)' }}>Loading marks…</div>
-                            : Object.keys(groupedDrawerMarks).length === 0 ? <div style={{ textAlign: 'center', padding: '40px', color: 'var(--tx-dim)' }}>No marks synced yet. Click "Fetch VTU" to load data.</div>
-                                : Object.entries(groupedDrawerMarks).sort(([a], [b]) => a - b).map(([sem, marks]) => (
-                                    <div key={sem}>
-                                        <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--tx-main)', marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
-                                            <span>Semester {sem}</span>
-                                            <span style={{ fontSize: '11px', color: 'var(--tx-dim)', fontWeight: 600 }}>
-                                                {(() => { let pts = 0, cr = 0; marks.forEach(m => { const c = m.credits || 3; const g = { O: 10, S: 10, 'A+': 9, A: 8, 'B+': 7, B: 6, C: 5, P: 4, F: 0, Ab: 0 }; pts += (g[m.grade] || 0) * c; cr += c; }); return cr > 0 ? `SGPA ${(pts / cr).toFixed(2)}` : ''; })()}
-                                            </span>
+
+                        {/* Drawer Tabs */}
+                        <div style={{ display: 'flex', gap: '4px', background: 'var(--surface-low)', padding: '4px', borderRadius: '12px', width: 'fit-content' }}>
+                            {[
+                                { id: 'marks', label: 'All Marks', icon: 'grade' },
+                                { id: 'backlogs', label: 'Backlogs', icon: 'warning' },
+                            ].map(t => (
+                                <button key={t.id} onClick={() => setDrawerTab(t.id)} style={{ padding: '8px 20px', borderRadius: '8px', border: 'none', background: drawerTab === t.id ? 'var(--bg)' : 'transparent', color: drawerTab === t.id ? 'var(--tx-main)' : 'var(--tx-muted)', fontWeight: drawerTab === t.id ? 700 : 600, fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span className="material-icons-round" style={{ fontSize: '16px' }}>{t.icon}</span>{t.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Drawer Content Area */}
+                        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, paddingRight: '8px' }}>
+                            {loadingDrawer ? (
+                                <div style={{ textAlign: 'center', padding: '100px 0', color: 'var(--tx-dim)' }}>
+                                    <div className="gf-spinner" style={{ marginBottom: '16px' }} />
+                                    Loading academic records…
+                                </div>
+                            ) : (() => {
+                                const marksToShow = drawerTab === 'backlogs' 
+                                    ? studentMarks.filter(m => m.grade === 'F' || m.grade === 'Ab')
+                                    : studentMarks;
+
+                                if (marksToShow.length === 0) {
+                                    return (
+                                        <div style={{ textAlign: 'center', padding: '100px 20px', color: 'var(--tx-dim)', background: 'var(--surface-low)', borderRadius: '24px' }}>
+                                            <span className="material-icons-round" style={{ fontSize: '48px', marginBottom: '12px', opacity: 0.2 }}>{drawerTab === 'backlogs' ? 'verified' : 'history_edu'}</span>
+                                            <div style={{ fontSize: '16px', fontWeight: 700 }}>{drawerTab === 'backlogs' ? 'No active backlogs' : 'No records yet'}</div>
+                                            <div style={{ fontSize: '13px' }}>{drawerTab === 'backlogs' ? 'This student has cleared all subjects!' : 'Click "Fetch VTU" to sync latest marks.'}</div>
                                         </div>
-                                        <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden', marginBottom: '20px' }}>
-                                            <thead><tr>{['Subject', 'CIE', 'SEE', 'Total', 'Grade'].map(h => <th key={h} style={{ ...S.th, padding: '8px 14px' }}>{h}</th>)}</tr></thead>
-                                            <tbody>
-                                                {marks.map(m => (
-                                                    <tr key={m.id || m.subject_code}>
-                                                        <td style={{ ...S.td, padding: '10px 14px' }}>
-                                                            <div style={{ fontWeight: 700, fontSize: '12px' }}>{m.subject_name}</div>
-                                                            <div style={{ fontSize: '10px', fontFamily: 'monospace', color: 'var(--tx-dim)' }}>{m.subject_code}</div>
-                                                        </td>
-                                                        <td style={{ ...S.td, textAlign: 'center', padding: '10px 14px' }}>{m.internal ?? m.cie_marks ?? '—'}</td>
-                                                        <td style={{ ...S.td, textAlign: 'center', padding: '10px 14px' }}>{m.external ?? m.see_marks ?? '—'}</td>
-                                                        <td style={{ ...S.td, textAlign: 'center', fontWeight: 800, padding: '10px 14px' }}>{m.total ?? m.total_marks ?? '—'}</td>
-                                                        <td style={{ ...S.td, textAlign: 'center', padding: '10px 14px' }}>
-                                                            <span style={{ padding: '3px 8px', borderRadius: '6px', fontWeight: 800, fontSize: '11px', background: m.grade === 'F' ? 'var(--red-bg)' : 'var(--green-bg)', color: m.grade === 'F' ? 'var(--red)' : 'var(--green)' }}>{m.grade}</span>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
+                                    );
+                                }
+
+                                const grouped = {};
+                                marksToShow.forEach(m => {
+                                    const s = m.semester || 1;
+                                    if (!grouped[s]) grouped[s] = [];
+                                    grouped[s].push(m);
+                                });
+
+                                return Object.entries(grouped).sort(([a], [b]) => a - b).map(([sem, marks]) => (
+                                    <div key={sem} style={{ marginBottom: '32px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', padding: '0 4px' }}>
+                                            <div style={{ fontSize: '15px', fontWeight: 900, color: 'var(--tx-main)', letterSpacing: '-0.02em' }}>Semester {sem}</div>
+                                            <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--primary)', background: 'var(--primary-bg)', padding: '4px 10px', borderRadius: '8px' }}>
+                                                {(() => {
+                                                    let pts = 0, cr = 0;
+                                                    marks.forEach(m => {
+                                                        const c = m.credits || 3;
+                                                        const g = { O: 10, S: 10, 'A+': 9, A: 8, 'B+': 7, B: 6, C: 5, P: 4, F: 0, Ab: 0 };
+                                                        pts += (g[m.grade] || 0) * c; cr += c;
+                                                    });
+                                                    return cr > 0 ? `SGPA ${(pts / cr).toFixed(2)}` : 'SGPA —';
+                                                })()}
+                                            </div>
+                                        </div>
+                                        <div style={{ background: 'var(--surface-low)', borderRadius: '16px', overflow: 'hidden', border: '1px solid var(--border)' }}>
+                                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                                <thead>
+                                                    <tr>{['Subject', 'CIE', 'SEE', 'Total', 'Grade'].map(h => <th key={h} style={{ ...S.th, padding: '12px 16px', background: 'rgba(0,0,0,0.02)' }}>{h}</th>)}</tr>
+                                                </thead>
+                                                <tbody>
+                                                    {marks.map((m, idx) => (
+                                                        <tr key={idx} style={{ borderTop: '1px solid var(--border)' }}>
+                                                            <td style={{ ...S.td, padding: '14px 16px' }}>
+                                                                <div style={{ fontWeight: 800, fontSize: '13px' }}>{m.subject_name}</div>
+                                                                <div style={{ fontSize: '10px', fontFamily: 'monospace', color: 'var(--tx-dim)', marginTop: '2px' }}>{m.subject_code}</div>
+                                                            </td>
+                                                            <td style={{ ...S.td, textAlign: 'center' }}>{m.cie_marks ?? m.internal ?? '—'}</td>
+                                                            <td style={{ ...S.td, textAlign: 'center' }}>{m.see_marks ?? m.external ?? '—'}</td>
+                                                            <td style={{ ...S.td, textAlign: 'center', fontWeight: 900, color: 'var(--tx-main)' }}>{m.total_marks ?? m.total ?? '—'}</td>
+                                                            <td style={{ ...S.td, textAlign: 'center' }}>
+                                                                <span style={{ padding: '4px 10px', borderRadius: '8px', fontWeight: 900, fontSize: '11px', background: m.grade === 'F' ? 'var(--red-bg)' : 'var(--green-bg)', color: m.grade === 'F' ? 'var(--red)' : 'var(--green)', minWidth: '28px', display: 'inline-block' }}>{m.grade}</span>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
                                     </div>
-                                ))}
+                                ));
+                            })()}
+                        </div>
                     </div>
                 </>
             )}

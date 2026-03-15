@@ -37,7 +37,7 @@ const S = {
     td: { padding: '13px 16px', borderBottom: '1px solid var(--border)', fontSize: '12px', fontWeight: 600, color: 'var(--tx-main)' },
     modal: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(12px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' },
     mbox: (w = '480px') => ({ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '24px', width: '100%', maxWidth: w, padding: '32px', display: 'flex', flexDirection: 'column', gap: '20px', maxHeight: '90vh', overflowY: 'auto' }),
-    drawer: { position: 'fixed', top: 0, right: 0, bottom: 0, width: '100%', maxWidth: '720px', background: 'var(--surface)', borderLeft: '1px solid var(--border)', zIndex: 1100, overflowY: 'auto', padding: '40px clamp(24px,4vw,48px)', display: 'flex', flexDirection: 'column', gap: '24px', boxShadow: '-20px 0 60px rgba(0,0,0,0.08)' },
+    drawer: { position: 'fixed', top: 0, right: 0, bottom: 0, width: '100%', maxWidth: '720px', background: 'var(--surface)', borderLeft: '1px solid var(--border)', zIndex: 1100, overflowY: 'hidden', padding: '40px clamp(24px,4vw,48px)', display: 'flex', flexDirection: 'column', gap: '24px', boxShadow: '-20px 0 60px rgba(0,0,0,0.08)' },
     overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(4px)', zIndex: 1050 },
 };
 const btn = (v = 'primary') => ({ padding: '10px 20px', borderRadius: '10px', fontWeight: 700, fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit', border: 'none', background: v === 'primary' ? 'var(--primary)' : v === 'danger' ? 'var(--red-bg)' : 'var(--surface-low)', color: v === 'primary' ? 'var(--bg)' : v === 'danger' ? 'var(--red)' : 'var(--tx-main)', ...(v !== 'primary' && { border: `1px solid ${v === 'danger' ? 'var(--red)' : 'var(--border)'}` }) });
@@ -121,6 +121,7 @@ function ClassesContent() {
     const [transferMode, setTransferMode] = useState('move');       // 'move' | 'copy'
     const [transferTarget, setTransferTarget] = useState('');       // destination class id
     const [transferLoading, setTransferLoading] = useState(false);
+    const [drawerTab, setDrawerTab] = useState('marks'); // 'marks' | 'backlogs'
     const fileRef = useRef(null);
 
     useEffect(() => {
@@ -134,19 +135,17 @@ function ClassesContent() {
         try { const r = await fetch('/api/classes'); const j = await r.json(); if (j.success) setClasses(j.classes || []); } finally { setLoadingClasses(false); }
     };
 
-    // ── Supabase paginated fetch (overcomes 1000-row default limit) ──
+    // ── Fetch all rows by chunking USNs (avoids PostgREST 1000-row & URL length limits) ──
     const fetchAllRows = async (table, selectCols, filterCol, filterValues, orderCol) => {
-        const PAGE = 1000;
         let all = [];
-        let from = 0;
-        while (true) {
-            let q = supabase.from(table).select(selectCols).in(filterCol, filterValues).range(from, from + PAGE - 1);
+        const CHUNK = 15; // 15 USNs per request is safe
+        for (let i = 0; i < filterValues.length; i += CHUNK) {
+            const chunk = filterValues.slice(i, i + CHUNK);
+            let q = supabase.from(table).select(selectCols).in(filterCol, chunk);
             if (orderCol) q = q.order(orderCol);
             const { data, error } = await q;
-            if (error) break;
+            if (error) continue;
             all = all.concat(data || []);
-            if (!data || data.length < PAGE) break;
-            from += PAGE;
         }
         return all;
     };
@@ -354,9 +353,23 @@ function ClassesContent() {
     };
 
     const openStudentDrawer = async s => {
-        setOpenStudent(s); setLoadingDrawer(true); setDrawerScrapeStatus('');
+        setOpenStudent(s); setLoadingDrawer(true); setDrawerScrapeStatus(''); setDrawerTab('marks');
         const { data: marks } = await supabase.from('subject_marks').select('*').eq('usn', s.usn).order('semester');
         setStudentMarks(marks || []); setLoadingDrawer(false);
+    };
+
+    const deleteStudentEntirely = async (usn, name) => {
+        if (!confirm(`⚠️ PERMANENTLY DELETE student ${name || usn} from the entire database?\n\nThis removes ALL their data: marks, profile, class enrollments.\nThis CANNOT be undone.`)) return;
+        const r = await fetch('/api/admin/delete-student', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ usn }) });
+        const j = await r.json();
+        if (j.success) {
+            setOpenStudent(null);
+            setStudents(p => p.filter(s => s.usn !== usn));
+            setMsg(`✓ Student ${usn} permanently deleted.`);
+            fetchClasses();
+        } else {
+            setMsg(j.error || 'Failed to delete student.');
+        }
     };
 
     const scrapeInDrawer = async () => {
@@ -649,7 +662,8 @@ function ClassesContent() {
                 <>
                     <div style={S.overlay} onClick={() => setOpenStudent(null)} />
                     <div style={S.drawer} className="gf-fade-up">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        {/* Header */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                                 <div style={{ width: '56px', height: '56px', borderRadius: '14px', background: 'var(--surface-low)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: 900, color: 'var(--tx-muted)', flexShrink: 0 }}>
                                     {(openStudent.name || openStudent.usn || '?')[0].toUpperCase()}
@@ -657,26 +671,80 @@ function ClassesContent() {
                                 <div>
                                     <h2 style={{ fontSize: '20px', fontWeight: 900, color: 'var(--tx-main)', letterSpacing: '-0.03em' }}>{openStudent.name}</h2>
                                     <div style={{ fontSize: '12px', fontFamily: 'monospace', color: 'var(--tx-muted)' }}>{openStudent.usn} · {openStudent.branch || '—'} · Sem {openStudent.semester || '—'}</div>
-                                    <div style={{ display: 'flex', gap: '12px', marginTop: '8px', flexWrap: 'wrap' }}>
+                                    <div style={{ display: 'flex', gap: '10px', marginTop: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
                                         {openStudent.cgpa != null && <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--primary)' }}>CGPA {openStudent.cgpa?.toFixed(2)}</span>}
-                                        <span style={{ fontSize: '12px', fontWeight: 700, color: openStudent.total_backlogs > 0 ? 'var(--red)' : 'var(--green)' }}>{openStudent.total_backlogs > 0 ? `${openStudent.total_backlogs} Backlogs` : 'All Clear ✓'}</span>
+                                        <span style={{ fontSize: '12px', fontWeight: 700, padding: '2px 10px', borderRadius: '6px', background: openStudent.total_backlogs > 0 ? 'var(--red-bg)' : 'var(--green-bg)', color: openStudent.total_backlogs > 0 ? 'var(--red)' : 'var(--green)' }}>
+                                            {openStudent.total_backlogs > 0 ? `${openStudent.total_backlogs} Backlogs` : 'All Clear ✓'}
+                                        </span>
                                     </div>
                                 </div>
                             </div>
-                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                <button onClick={scrapeInDrawer} disabled={drawerScrapeStatus === 'scraping'} style={btn(drawerScrapeStatus === 'queued' ? 'ghost' : 'ghost')}>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                <button onClick={scrapeInDrawer} disabled={drawerScrapeStatus === 'scraping'} style={btn('ghost')}>
                                     <span className="material-icons-round" style={{ fontSize: '14px', verticalAlign: 'middle', marginRight: '4px' }}>refresh</span>
                                     {drawerScrapeStatus === 'scraping' ? 'Fetching…' : drawerScrapeStatus === 'queued' ? 'Queued ✓' : 'Fetch VTU'}
+                                </button>
+                                <button onClick={() => deleteStudentEntirely(openStudent.usn, openStudent.name)} style={{ ...btn('danger'), fontSize: '12px', padding: '8px 14px' }}>
+                                    <span className="material-icons-round" style={{ fontSize: '14px', verticalAlign: 'middle', marginRight: '4px' }}>delete_forever</span>
+                                    Delete Student
                                 </button>
                                 <button onClick={() => setOpenStudent(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tx-muted)' }}>
                                     <span className="material-icons-round" style={{ fontSize: '26px' }}>close</span>
                                 </button>
                             </div>
                         </div>
+
+                        {/* Drawer Tabs */}
+                        <div style={{ display: 'flex', gap: '4px', background: 'var(--surface-low)', borderRadius: '10px', padding: '4px', flexShrink: 0 }}>
+                            {[
+                                { id: 'marks', label: 'All Marks', icon: 'school' },
+                                { id: 'backlogs', label: `Backlogs${openStudent.total_backlogs > 0 ? ` (${openStudent.total_backlogs})` : ''}`, icon: 'warning_amber' },
+                            ].map(t => (
+                                <button key={t.id} onClick={() => setDrawerTab(t.id)} style={{ flex: 1, padding: '8px', border: 'none', borderRadius: '8px', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', background: drawerTab === t.id ? 'var(--bg)' : 'transparent', color: drawerTab === t.id ? 'var(--tx-main)' : 'var(--tx-dim)', transition: 'all 0.15s' }}>
+                                    <span className="material-icons-round" style={{ fontSize: '14px', color: t.id === 'backlogs' && openStudent.total_backlogs > 0 ? 'var(--red)' : 'inherit' }}>{t.icon}</span>
+                                    <span style={{ color: t.id === 'backlogs' && openStudent.total_backlogs > 0 ? 'var(--red)' : 'inherit' }}>{t.label}</span>
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Drawer Content */}
+                        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
                         {loadingDrawer ? <div style={{ textAlign: 'center', padding: '40px', color: 'var(--tx-dim)' }}>Loading marks…</div>
-                            : Object.keys(groupedDrawerMarks).length === 0 ? <div style={{ textAlign: 'center', padding: '40px', color: 'var(--tx-dim)' }}>No marks synced yet. Click "Fetch VTU" to load data.</div>
+                            : drawerTab === 'backlogs' ? (() => {
+                                const FAIL_GRADES = new Set(['F', 'X', 'NE', 'W', 'FAIL', 'ABSENT', 'A']);
+                                const backlogs = studentMarks.filter(m => FAIL_GRADES.has((m.grade || 'F').toUpperCase()));
+                                if (backlogs.length === 0) return (
+                                    <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+                                        <span className="material-icons-round" style={{ fontSize: '48px', color: 'var(--green)', marginBottom: '12px', display: 'block' }}>check_circle</span>
+                                        <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--green)' }}>No Backlogs!</div>
+                                        <div style={{ fontSize: '13px', color: 'var(--tx-dim)', marginTop: '4px' }}>This student has cleared all subjects.</div>
+                                    </div>
+                                );
+                                const bySubj = {};
+                                backlogs.forEach(m => { const key = m.subject_code || m.subject_name; if (!bySubj[key]) bySubj[key] = []; bySubj[key].push(m); });
+                                return (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingTop: '4px' }}>
+                                        {Object.entries(bySubj).map(([code, rows]) => (
+                                            <div key={code} style={{ background: 'var(--red-bg)', border: '1px solid var(--red)', borderRadius: '12px', padding: '14px 16px' }}>
+                                                <div style={{ fontWeight: 800, fontSize: '13px', color: 'var(--red)', marginBottom: '4px' }}>{rows[0].subject_name || code}</div>
+                                                <div style={{ fontSize: '11px', fontFamily: 'monospace', color: 'var(--tx-dim)', marginBottom: '8px' }}>{code}</div>
+                                                <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                                                    {rows.map((r, i) => (
+                                                        <div key={i} style={{ fontSize: '12px' }}>
+                                                            <span style={{ color: 'var(--tx-dim)' }}>Sem {r.semester} · </span>
+                                                            <span style={{ fontWeight: 700, color: 'var(--red)' }}>Grade: {r.grade || 'F'}</span>
+                                                            {r.total != null && <span style={{ color: 'var(--tx-muted)' }}> · Total: {r.total}</span>}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                );
+                            })()
+                            : Object.keys(groupedDrawerMarks).length === 0
+                                ? <div style={{ textAlign: 'center', padding: '40px', color: 'var(--tx-dim)' }}>No marks synced yet. Click "Fetch VTU" to load data.</div>
                                 : Object.entries(groupedDrawerMarks).sort(([a], [b]) => a - b).map(([sem, marks]) => {
-                                    // Proper SGPA calculation using VTU marks-based grade points
                                     const excludeGrades = new Set(['PP', 'NP', 'W', 'DX', 'AU', 'X', 'NE']);
                                     let tc = 0, tcp = 0;
                                     marks.forEach(m => {
@@ -735,7 +803,9 @@ function ClassesContent() {
                                         </table>
                                     </div>
                                     );
-                                })}
+                                })
+                        }
+                        </div>
                     </div>
                 </>
             )}
