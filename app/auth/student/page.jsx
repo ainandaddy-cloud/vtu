@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { supabase } from '../../../lib/supabase';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
-export default function StudentAuth() {
+function StudentAuthContent() {
     const router = useRouter();
-    const [mode, setMode] = useState('login'); // 'login' | 'activate' | 'forgot' | 'show_pin'
+    const searchParams = useSearchParams();
+    const [mode, setMode] = useState(searchParams.get('mode') || 'login'); // 'login' | 'activate' | 'forgot' | 'show_pin'
     const [usn, setUsn] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -308,7 +309,7 @@ export default function StudentAuth() {
         card: {
             width: '100%', maxWidth: '440px',
             background: 'var(--surface)', border: '1px solid var(--border)',
-            borderRadius: '24px', padding: '48px',
+            borderRadius: '24px', padding: 'clamp(24px, 6vw, 48px)',
         },
         backLink: {
             display: 'flex', alignItems: 'center', gap: '6px',
@@ -324,13 +325,26 @@ export default function StudentAuth() {
         heading: { fontSize: '26px', fontWeight: 900, color: 'var(--tx-main)', letterSpacing: '-0.03em', marginBottom: '8px' },
         subtext: { fontSize: '14px', color: 'var(--tx-muted)', fontWeight: 500, lineHeight: 1.6, marginBottom: '32px' },
 
-        tabRow: { display: 'flex', gap: '4px', background: 'var(--surface-low)', padding: '4px', borderRadius: '12px', marginBottom: '28px' },
+        tabRow: { 
+            display: 'flex', 
+            gap: '4px', 
+            background: 'var(--surface-low)', 
+            padding: '4px', 
+            borderRadius: '14px', 
+            marginBottom: '28px',
+            width: '100%',
+        },
         tabBtn: (active) => ({
-            flex: 1, padding: '9px', borderRadius: '8px', border: 'none',
+            flex: 1, padding: '10px 8px', borderRadius: '10px', border: 'none',
             background: active ? 'var(--surface)' : 'transparent',
             color: active ? 'var(--tx-main)' : 'var(--tx-muted)',
             fontWeight: active ? 700 : 600, fontSize: '12px',
             cursor: 'pointer', fontFamily: 'inherit', textAlign: 'center',
+            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+            minWidth: 0,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
         }),
 
         label: { display: 'block', fontSize: '11px', fontWeight: 800, color: 'var(--tx-dim)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '8px' },
@@ -372,21 +386,23 @@ export default function StudentAuth() {
                     <span style={{ fontWeight: 800, fontSize: '17px', color: 'var(--tx-main)' }}>GradeFlow</span>
                 </div>
 
-                <h1 style={s.heading}>Student Access</h1>
+                <h1 style={s.heading}>{mode === 'forgot' ? 'Reset Password' : 'Student Access'}</h1>
                 <p style={s.subtext}>
                     {mode === 'login'
-                        ? 'Sign in with your USN and password to access your academic dashboard.'
+                        ? 'Sign in with your USN and password to access your dashboard.'
                         : mode === 'activate'
                             ? 'First time? Set a password to activate your account.'
                             : mode === 'show_pin'
-                                ? 'Please take a screenshot of this page. You will need this PIN if you ever forget your password.'
-                                : 'Forgot password? Enter your USN and 4-digit Recovery PIN to reset.'}
+                                ? 'Please take a screenshot of this page. You will need this PIN.'
+                                : 'Enter your USN and 4-digit Recovery PIN to reset.'}
                 </p>
 
-                <div style={s.tabRow}>
-                    <button style={s.tabBtn(mode === 'login')} onClick={() => { setMode('login'); setError(''); setSuccess(''); }}>Sign In</button>
-                    <button style={s.tabBtn(mode === 'activate')} onClick={() => { setMode('activate'); setError(''); setSuccess(''); }}>First Time? Activate</button>
-                </div>
+                {(mode === 'login' || mode === 'activate') && (
+                    <div style={s.tabRow}>
+                        <button style={s.tabBtn(mode === 'login')} onClick={() => { setMode('login'); setError(''); setSuccess(''); }}>Sign In</button>
+                        <button style={s.tabBtn(mode === 'activate')} onClick={() => { setMode('activate'); setError(''); setSuccess(''); }}>{mode === 'activate' ? 'Activate Account' : 'Activate'}</button>
+                    </div>
+                )}
 
                 {error && <div style={s.errorBox}>{error}</div>}
                 {success && <div style={s.successBox}>{success}</div>}
@@ -486,5 +502,13 @@ export default function StudentAuth() {
                 </p>
             </div>
         </div>
+    );
+}
+
+export default function StudentAuth() {
+    return (
+        <Suspense fallback={<div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading...</div>}>
+            <StudentAuthContent />
+        </Suspense>
     );
 }
