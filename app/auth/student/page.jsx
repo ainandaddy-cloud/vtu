@@ -400,7 +400,7 @@ function StudentAuthContent() {
                 {(mode === 'login' || mode === 'activate') && (
                     <div style={s.tabRow}>
                         <button style={s.tabBtn(mode === 'login')} onClick={() => { setMode('login'); setError(''); setSuccess(''); }}>Sign In</button>
-                        <button style={s.tabBtn(mode === 'activate')} onClick={() => { setMode('activate'); setError(''); setSuccess(''); }}>{mode === 'activate' ? 'Activate Account' : 'Activate'}</button>
+                        <button style={s.tabBtn(mode === 'activate')} onClick={() => { setMode('activate'); setError(''); setSuccess(''); }}>Activate</button>
                     </div>
                 )}
 
