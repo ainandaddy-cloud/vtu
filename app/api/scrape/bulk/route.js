@@ -1,12 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_KEY!
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_KEY
 )
 
-export async function POST(req: NextRequest) {
+export async function POST(req) {
     try {
         const { usns, role, secret_key, base_url, faculty_id } = await req.json()
 
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
 
         for (let i = 0; i < usns.length; i += chunkSize) {
             const chunk = usns.slice(i, i + chunkSize);
-            const insertPayload = chunk.map((usn: string) => ({
+            const insertPayload = chunk.map((usn) => ({
                 usn: usn.toUpperCase(),
                 faculty_id: faculty_id || null,
                 status: 'queued',
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
             note: "The Playwright worker will process these sequentially mapping 'AB' as Backlogs."
         })
 
-    } catch (err: any) {
+    } catch (err) {
         console.error("[BULK API] Execution Error:", err)
         return NextResponse.json({ error: 'Internal server error.', details: err.message }, { status: 500 })
     }

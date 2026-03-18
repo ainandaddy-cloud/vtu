@@ -1,9 +1,14 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import * as XLSX from 'xlsx';
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+const PIE_COLORS = ['#22c55e', '#ef4444', '#6366f1', '#f59e0b', '#14b8a6', '#8b5cf6', '#f97316', '#3b82f6'];
 import { supabase } from '../../../lib/supabase';
 import AuthGuard from '../../../components/AuthGuard';
 import { useRouter } from 'next/navigation';
+import { fetchByChunks } from '../../../lib/supabase-utils';
+import SemesterResults from '../../../components/SemesterResults';
+import ClassSemesterSummary from '../../../components/ClassSemesterSummary';
 
 const BRANCHES = { CS: 'CSE', IS: 'ISE', EC: 'ECE', EE: 'EEE', ME: 'ME', CV: 'Civil', AI: 'AI & ML', DS: 'Data Science', CB: 'CS & Business', AD: 'AI & DS' };
 const MEDALS = ['🥇', '🥈', '🥉'];
@@ -122,6 +127,7 @@ function ClassesContent() {
     const [transferTarget, setTransferTarget] = useState('');       // destination class id
     const [transferLoading, setTransferLoading] = useState(false);
     const [drawerTab, setDrawerTab] = useState('marks'); // 'marks' | 'backlogs'
+    const [marksViewSem, setMarksViewSem] = useState(null);
     const fileRef = useRef(null);
 
     useEffect(() => {
@@ -135,20 +141,6 @@ function ClassesContent() {
         try { const r = await fetch('/api/classes'); const j = await r.json(); if (j.success) setClasses(j.classes || []); } finally { setLoadingClasses(false); }
     };
 
-    // ── Fetch all rows by chunking USNs (avoids PostgREST 1000-row & URL length limits) ──
-    const fetchAllRows = async (table, selectCols, filterCol, filterValues, orderCol) => {
-        let all = [];
-        const CHUNK = 15; // 15 USNs per request is safe
-        for (let i = 0; i < filterValues.length; i += CHUNK) {
-            const chunk = filterValues.slice(i, i + CHUNK);
-            let q = supabase.from(table).select(selectCols).in(filterCol, chunk);
-            if (orderCol) q = q.order(orderCol);
-            const { data, error } = await q;
-            if (error) continue;
-            all = all.concat(data || []);
-        }
-        return all;
-    };
 
     const fetchClassStudents = useCallback(async (cls) => {
         setLoadingStudents(true); setStudents([]); setAllMarks([]); setSubjectToppers([]); setAvailableSems([]);
@@ -161,7 +153,7 @@ function ClassesContent() {
             if (studs.length > 0) {
                 const usns = studs.map(s => s.usn);
                 // Paginated fetch — gets ALL marks, not just 1000
-                const marks = await fetchAllRows('subject_marks', 'usn,subject_code,subject_name,internal,external,total,grade,credits,passed,semester', 'usn', usns, 'semester');
+                const marks = await fetchByChunks('subject_marks', 'usn,subject_code,subject_name,internal,external,total,grade,credits,passed,semester', 'usn', usns, supabase, 15);
                 if (marks?.length) {
                     setAllMarks(marks);
                     const semsInData = Array.from(new Set(marks.map(m => Number(m.semester)))).sort((a,b) => a-b);
@@ -171,9 +163,10 @@ function ClassesContent() {
                     setAvailableSems(sems);
                     const last = Number(cls.semester) || maxSem || 1;
                     setSelectedSem(last);
+                    setMarksViewSem(last);
                     
                     // Also paginate remarks
-                    const remarks = await fetchAllRows('academic_remarks', 'student_usn,semester,sgpa', 'student_usn', usns);
+                    const remarks = await fetchByChunks('academic_remarks', 'student_usn,semester,sgpa', 'student_usn', usns, supabase, 15);
                     computeToppers(marks, studs, last, remarks || []);
                 } else {
                     const parsedSem = Number(cls.semester) || 1;
@@ -492,9 +485,16 @@ function ClassesContent() {
             {msg && <div style={msgBox(msg.startsWith('✓'))}>{msg}</div>}
 
             {/* TAB SWITCHER */}
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '24px', borderBottom: '1px solid var(--border)', paddingBottom: '10px' }}>
-                <button onClick={() => setClassTab('analytics')} style={{ padding: '8px 16px', background: classTab === 'analytics' ? 'var(--primary)' : 'transparent', color: classTab === 'analytics' ? 'var(--bg)' : 'var(--tx-dim)', borderRadius: '10px', border: 'none', fontWeight: 800, fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit' }}>Analytics & Rankings</button>
-                <button onClick={() => setClassTab('roster')} style={{ padding: '8px 16px', background: classTab === 'roster' ? 'var(--primary)' : 'transparent', color: classTab === 'roster' ? 'var(--bg)' : 'var(--tx-dim)', borderRadius: '10px', border: 'none', fontWeight: 800, fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit' }}>Students List</button>
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '24px', borderBottom: '1px solid var(--border)', paddingBottom: '10px', flexWrap: 'wrap' }}>
+                {[
+                    { id: 'analytics', label: 'Analytics & Rankings', icon: 'leaderboard' },
+                    { id: 'marksview', label: 'Marks View', icon: 'grid_on' },
+                    { id: 'roster', label: 'Students List', icon: 'people' },
+                ].map(t => (
+                    <button key={t.id} onClick={() => setClassTab(t.id)} style={{ padding: '8px 16px', background: classTab === t.id ? 'var(--primary)' : 'transparent', color: classTab === t.id ? 'var(--bg)' : 'var(--tx-dim)', borderRadius: '10px', border: 'none', fontWeight: 800, fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span className="material-icons-round" style={{ fontSize: '16px' }}>{t.icon}</span>{t.label}
+                    </button>
+                ))}
             </div>
 
             {classTab === 'analytics' && (
@@ -547,7 +547,7 @@ function ClassesContent() {
                         {(availableSems.length > 0 ? availableSems : [1,2,3,4,5,6,7,8]).map(s => (
                                 <button key={s} onClick={async () => { 
                                     setSelectedSem(s); 
-                                    const remarks = await fetchAllRows('academic_remarks', 'student_usn,semester,sgpa', 'student_usn', students.map(st=>st.usn));
+                                    const remarks = await fetchByChunks('academic_remarks', 'student_usn,semester,sgpa', 'student_usn', students.map(st=>st.usn), supabase, 15);
                                     computeToppers(allMarks, students, s, remarks || []); 
                                 }} style={{ padding: '6px 14px', borderRadius: '8px', fontWeight: 800, fontSize: '12px', cursor: 'pointer', border: 'none', fontFamily: 'inherit', background: Number(selectedSem) === Number(s) ? 'var(--primary)' : 'var(--surface-low)', color: Number(selectedSem) === Number(s) ? 'var(--bg)' : 'var(--tx-dim)' }}>Sem {s}</button>
                             ))}
@@ -598,9 +598,187 @@ function ClassesContent() {
                             </div>
                         </>
                     )}
+
+                    {/* Class Wide Semester Analysis */}
+                    {students.length > 0 && selectedSem && (
+                        <ClassSemesterSummary 
+                            students={students} 
+                            allMarks={allMarks} 
+                            selectedSem={selectedSem} 
+                        />
+                    )}
                 </div>
             </div>
             )}
+
+            {/* ── MARKS VIEW TAB ── */}
+            {classTab === 'marksview' && (() => {
+                const mvSem = marksViewSem || selectedSem || (availableSems[0] ?? 1);
+                const semMarks = allMarks.filter(m => Number(m.semester) === Number(mvSem));
+                const studentMap = Object.fromEntries(students.map(s => [s.usn, s]));
+
+                // Build subject-wise analytics
+                const bySubject = {};
+                semMarks.forEach(m => {
+                    const code = m.subject_code || 'UNKNOWN';
+                    if (!bySubject[code]) bySubject[code] = { name: m.subject_name || code, code, marks: [] };
+                    bySubject[code].marks.push(m);
+                });
+
+                const subjectAnalytics = Object.values(bySubject).sort((a, b) => a.code.localeCompare(b.code)).map(sub => {
+                    const total = students.length;
+                    const attempted = sub.marks.length;
+                    const FAIL_SET = new Set(['F', 'X', 'NE', 'W', 'A', 'FAIL', 'ABSENT']);
+                    const passed = sub.marks.filter(m => !FAIL_SET.has((m.grade || 'F').toUpperCase())).length;
+                    const failed = attempted - passed;
+                    const passP = attempted > 0 ? Math.round((passed / attempted) * 100) : 0;
+                    const avgTotal = attempted > 0 ? Math.round(sub.marks.reduce((s, m) => s + (m.total || 0), 0) / attempted) : 0;
+                    const gradeCount = {};
+                    sub.marks.forEach(m => { const g = (m.grade || 'F').toUpperCase(); gradeCount[g] = (gradeCount[g] || 0) + 1; });
+                    return { ...sub, total, attempted, passed, failed, passP, avgTotal, gradeCount };
+                });
+
+                // Excel export for marks view
+                const exportMarksExcel = () => {
+                    const wb = XLSX.utils.book_new();
+                    // Sheet 1: All students x subjects grid
+                    const subjects = subjectAnalytics.map(s => s.code);
+                    const header = ['USN', 'Name', ...subjects.flatMap(code => [`${code} (CIE)`, `${code} (SEE)`, `${code} (Total)`, `${code} (Grade)`])];
+                    const rows = students.map(stu => {
+                        const stuMarks = Object.fromEntries(semMarks.filter(m => m.usn === stu.usn).map(m => [m.subject_code, m]));
+                        return [stu.usn, stu.name, ...subjects.flatMap(code => {
+                            const m = stuMarks[code];
+                            return m ? [m.internal ?? '—', m.external ?? '—', m.total ?? '—', m.grade ?? '—'] : ['—', '—', '—', '—'];
+                        })];
+                    });
+                    const ws1 = XLSX.utils.aoa_to_sheet([header, ...rows]);
+                    XLSX.utils.book_append_sheet(wb, ws1, `Sem ${mvSem} All Marks`);
+
+                    // Sheet 2: Subject analytics
+                    const analytics = [['Subject Code', 'Subject Name', 'Students Appeared', 'Passed', 'Failed', 'Pass %', 'Avg Total']];
+                    subjectAnalytics.forEach(s => analytics.push([s.code, s.name, s.attempted, s.passed, s.failed, s.passP + '%', s.avgTotal]));
+                    const ws2 = XLSX.utils.aoa_to_sheet(analytics);
+                    XLSX.utils.book_append_sheet(wb, ws2, 'Subject Analytics');
+
+                    XLSX.writeFile(wb, `${selectedClass.name}_Sem${mvSem}_Marks.xlsx`);
+                };
+
+                return (
+                    <div className="gf-fade-up">
+                        {/* Header */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+                            <div>
+                                <h3 style={{ fontSize: '18px', fontWeight: 900, margin: 0 }}>Marks View — Semester {mvSem}</h3>
+                                <div style={{ fontSize: '12px', color: 'var(--tx-muted)', marginTop: '4px' }}>{students.length} students · {Object.keys(bySubject).length} subjects</div>
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                <div style={{ display: 'flex', gap: '4px', background: 'var(--surface-low)', padding: '4px', borderRadius: '10px' }}>
+                                    {(availableSems.length > 0 ? availableSems : [1,2,3,4,5,6,7,8]).map(s => (
+                                        <button key={s} onClick={() => setMarksViewSem(s)} style={{ padding: '6px 12px', borderRadius: '7px', fontWeight: 800, fontSize: '12px', cursor: 'pointer', border: 'none', fontFamily: 'inherit', background: Number(mvSem) === Number(s) ? 'var(--primary)' : 'transparent', color: Number(mvSem) === Number(s) ? 'var(--bg)' : 'var(--tx-dim)' }}>Sem {s}</button>
+                                    ))}
+                                </div>
+                                <button onClick={exportMarksExcel} style={btn('ghost')}>
+                                    <span className="material-icons-round" style={{ fontSize: '16px' }}>download</span>Export Excel
+                                </button>
+                            </div>
+                        </div>
+
+                        {semMarks.length === 0 ? (
+                            <div style={{ textAlign: 'center', padding: '60px', color: 'var(--tx-dim)' }}>
+                                <span className="material-icons-round" style={{ fontSize: '48px', display: 'block', marginBottom: '12px', opacity: 0.3 }}>grid_off</span>
+                                No marks found for Semester {mvSem}. Fetch VTU results to populate data.
+                            </div>
+                        ) : (
+                            <>
+                                {/* Subject Analytics Cards */}
+                                <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--tx-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>Subject-wise Analytics</div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px', marginBottom: '28px' }}>
+                                    {subjectAnalytics.map(sub => {
+                                        const pieData = [
+                                            { name: 'Passed', value: sub.passed },
+                                            { name: 'Failed', value: sub.failed },
+                                        ].filter(d => d.value > 0);
+                                        return (
+                                            <div key={sub.code} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '16px', padding: '16px', overflow: 'hidden' }}>
+                                                <div style={{ fontFamily: 'monospace', fontSize: '10px', fontWeight: 800, color: 'var(--tx-dim)', marginBottom: '2px' }}>{sub.code}</div>
+                                                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--tx-main)', marginBottom: '12px', lineHeight: 1.3 }}>{sub.name}</div>
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+                                                    {[
+                                                        { label: 'Appeared', val: sub.attempted },
+                                                        { label: 'Avg Score', val: sub.avgTotal },
+                                                        { label: 'Pass %', val: `${sub.passP}%`, color: sub.passP >= 75 ? 'var(--green)' : sub.passP >= 50 ? 'var(--amber)' : 'var(--red)' },
+                                                        { label: 'Fail', val: sub.failed, color: sub.failed > 0 ? 'var(--red)' : 'var(--green)' },
+                                                    ].map(stat => (
+                                                        <div key={stat.label} style={{ background: 'var(--surface-low)', borderRadius: '8px', padding: '8px 10px' }}>
+                                                            <div style={{ fontSize: '10px', color: 'var(--tx-dim)', fontWeight: 700 }}>{stat.label}</div>
+                                                            <div style={{ fontSize: '16px', fontWeight: 900, color: stat.color || 'var(--tx-main)' }}>{stat.val}</div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                {pieData.length > 0 && (
+                                                    <ResponsiveContainer width="100%" height={120}>
+                                                        <PieChart>
+                                                            <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={30} outerRadius={50} paddingAngle={4}>
+                                                                {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                                                            </Pie>
+                                                            <Tooltip formatter={(v, n) => [`${v} students`, n]} />
+                                                            <Legend iconSize={8} wrapperStyle={{ fontSize: '11px' }} />
+                                                        </PieChart>
+                                                    </ResponsiveContainer>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* All Students Marks Table */}
+                                <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--tx-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>All Students — Semester {mvSem} Marks</div>
+                                <div className="gf-table-wrap">
+                                    <table className="gf-table" style={{ minWidth: `${300 + subjectAnalytics.length * 180}px` }}>
+                                        <thead>
+                                            <tr>
+                                                <th>Student</th>
+                                                {subjectAnalytics.map(sub => (
+                                                    <th key={sub.code} style={{ textAlign: 'center', minWidth: '160px' }}>
+                                                        <div>{sub.code}</div>
+                                                        <div style={{ fontWeight: 500, fontSize: '10px', textTransform: 'none', opacity: 0.7, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px' }}>{sub.name}</div>
+                                                    </th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {[...students].sort((a, b) => a.usn.localeCompare(b.usn)).map(stu => {
+                                                const stuMarkMap = Object.fromEntries(semMarks.filter(m => m.usn === stu.usn).map(m => [m.subject_code, m]));
+                                                return (
+                                                    <tr key={stu.usn}>
+                                                        <td>
+                                                            <div style={{ fontWeight: 700, fontSize: '12px' }}>{stu.name}</div>
+                                                            <div style={{ fontSize: '10px', fontFamily: 'monospace', color: 'var(--tx-dim)' }}>{stu.usn}</div>
+                                                        </td>
+                                                        {subjectAnalytics.map(sub => {
+                                                            const m = stuMarkMap[sub.code];
+                                                            if (!m) return <td key={sub.code} style={{ textAlign: 'center', color: 'var(--tx-dim)' }}>—</td>;
+                                                            const FAIL_SET = new Set(['F', 'X', 'NE', 'W', 'A', 'FAIL', 'ABSENT']);
+                                                            const isFail = FAIL_SET.has((m.grade || 'F').toUpperCase());
+                                                            return (
+                                                                <td key={sub.code} style={{ textAlign: 'center' }}>
+                                                                    <div style={{ fontWeight: 800, fontSize: '13px', color: isFail ? 'var(--red)' : 'var(--tx-main)' }}>{m.total ?? '—'}</div>
+                                                                    <div style={{ fontSize: '10px', color: 'var(--tx-dim)' }}>{m.internal ?? '—'}/{m.external ?? '—'}</div>
+                                                                    <span style={{ display: 'inline-block', marginTop: '2px', padding: '2px 6px', borderRadius: '4px', fontSize: '9px', fontWeight: 900, background: isFail ? 'var(--red-bg)' : 'var(--green-bg)', color: isFail ? 'var(--red)' : 'var(--green)' }}>{m.grade || 'F'}</span>
+                                                                </td>
+                                                            );
+                                                        })}
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                );
+            })()}
 
             {classTab === 'roster' && (
                 <div className="gf-fade-up" style={{ ...S.card, padding: '0', overflow: 'hidden' }}>
@@ -698,6 +876,7 @@ function ClassesContent() {
                         <div style={{ display: 'flex', gap: '4px', background: 'var(--surface-low)', borderRadius: '10px', padding: '4px', flexShrink: 0 }}>
                             {[
                                 { id: 'marks', label: 'All Marks', icon: 'school' },
+                                { id: 'semesters', label: 'Semester Analysis', icon: 'auto_graph' },
                                 { id: 'backlogs', label: `Backlogs${openStudent.total_backlogs > 0 ? ` (${openStudent.total_backlogs})` : ''}`, icon: 'warning_amber' },
                             ].map(t => (
                                 <button key={t.id} onClick={() => setDrawerTab(t.id)} style={{ flex: 1, padding: '8px', border: 'none', borderRadius: '8px', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', background: drawerTab === t.id ? 'var(--bg)' : 'transparent', color: drawerTab === t.id ? 'var(--tx-main)' : 'var(--tx-dim)', transition: 'all 0.15s' }}>
@@ -710,6 +889,9 @@ function ClassesContent() {
                         {/* Drawer Content */}
                         <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
                         {loadingDrawer ? <div style={{ textAlign: 'center', padding: '40px', color: 'var(--tx-dim)' }}>Loading marks…</div>
+                            : drawerTab === 'semesters' ? (
+                                <SemesterResults marks={studentMarks} scheme={openStudent.scheme || '2022'} />
+                            )
                             : drawerTab === 'backlogs' ? (() => {
                                 const FAIL_GRADES = new Set(['F', 'X', 'NE', 'W', 'FAIL', 'ABSENT', 'A']);
                                 const backlogs = studentMarks.filter(m => FAIL_GRADES.has((m.grade || 'F').toUpperCase()));
@@ -1175,6 +1357,7 @@ function ClassesContent() {
                             <select style={S.sel} value={newClass.scheme} onChange={e => setNewClass(p => ({ ...p, scheme: e.target.value }))}>
                                 <option value="2022">2022 Scheme (CBCS NEP)</option>
                                 <option value="2025">2025 Scheme (NEP 2025)</option>
+
                             </select>
                         </div>
                     </div>

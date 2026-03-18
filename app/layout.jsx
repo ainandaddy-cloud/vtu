@@ -1,6 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
+import { ClerkProvider } from '@clerk/nextjs';
 import Sidebar from '../components/Navbar';
 import ThemeProvider from '../components/ThemeProvider';
 import { Plus_Jakarta_Sans } from 'next/font/google';
@@ -94,9 +95,11 @@ export default function RootLayout({ children }) {
                 />
             </head>
             <body className={jakarta.className}>
-                <ThemeProvider>
-                    <LayoutWrapper>{children}</LayoutWrapper>
-                </ThemeProvider>
+                <ClerkProvider>
+                    <ThemeProvider>
+                        <LayoutWrapper>{children}</LayoutWrapper>
+                    </ThemeProvider>
+                </ClerkProvider>
             </body>
         </html>
     );

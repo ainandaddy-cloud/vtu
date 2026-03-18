@@ -9,20 +9,7 @@ const supabaseAdmin = createClient(
 
 export const dynamic = 'force-dynamic';
 
-// Helper to fetch all rows beyond 1000
-async function fetchAllRows(table, select, filterCol, filterValues) {
-    const PAGE = 1000;
-    let all = [];
-    let from = 0;
-    while (true) {
-        let { data, error } = await supabaseAdmin.from(table).select(select).in(filterCol, filterValues).range(from, from + PAGE - 1);
-        if (error) throw error;
-        all = all.concat(data || []);
-        if (!data || data.length < PAGE) break;
-        from += PAGE;
-    }
-    return all;
-}
+import { fetchByChunks } from '../../../lib/supabase-utils';
 
 // GET — students in a class, joined with their CGPA/backlog data
 export async function GET(req) {
@@ -32,7 +19,7 @@ export async function GET(req) {
         if (!class_id) return NextResponse.json({ error: 'class_id required.' }, { status: 400 });
 
         // Get USNs in class (paginated)
-        const members = await fetchAllRows('class_students', 'id, usn, added_at, added_by', 'class_id', [class_id]);
+        const members = await fetchByChunks('class_students', 'id, usn, added_at, added_by', 'class_id', [class_id], supabaseAdmin);
 
         if (!members || members.length === 0) {
             return NextResponse.json({ success: true, students: [] });
@@ -41,13 +28,13 @@ export async function GET(req) {
         const usns = members.map(m => m.usn);
 
         // Fetch student profiles (paginated)
-        const profiles = await fetchAllRows('students', 'usn, name, branch, semester', 'usn', usns);
+        const profiles = await fetchByChunks('students', 'usn, name, branch, semester', 'usn', usns, supabaseAdmin);
 
         // Fetch academic remarks (SGPA per semester) + results (credits per semester) for CGPA (paginated)
-        const remarks = await fetchAllRows('academic_remarks', 'student_usn, sgpa, backlog_count, semester', 'student_usn', usns);
+        const remarks = await fetchByChunks('academic_remarks', 'student_usn, sgpa, backlog_count, semester', 'student_usn', usns, supabaseAdmin);
 
         // Pull total_credits per student per semester from results table for weighted CGPA (paginated)
-        const resultRows = await fetchAllRows('results', 'usn, semester, sgpa, total_credits', 'usn', usns);
+        const resultRows = await fetchByChunks('results', 'usn, semester, sgpa, total_credits', 'usn', usns, supabaseAdmin);
 
         // Build a map: usn → { semester → total_credits }
         const creditsMap = {};
@@ -122,7 +109,7 @@ export async function POST(req) {
         if (usns.length === 0) return NextResponse.json({ error: 'No USNs provided.' }, { status: 400 });
 
         // Ensure student profiles exist (BULK OPTIMIZED) — paginate check
-        const existing = await fetchAllRows('students', 'usn', 'usn', usns);
+        const existing = await fetchByChunks('students', 'usn', 'usn', usns, supabaseAdmin);
         const existingSet = new Set((existing || []).map(e => e.usn));
 
         const toInsert = usns.filter(u => !existingSet.has(u)).map(u => ({ usn: u, name: u }));

@@ -315,6 +315,7 @@ function AdminPanelContent() {
         { id: 'classes', label: 'Classes', icon: 'groups', href: '/admin/classes' },
         { id: 'requests', label: 'Faculty Access', icon: 'verified_user' },
         { id: 'activity', label: 'Activity Log', icon: 'history' },
+        { id: 'audit', label: 'System Audit', icon: 'security', href: '/admin/audit-log' },
         { id: 'settings', label: 'Settings', icon: 'settings_suggest' },
     ];
 

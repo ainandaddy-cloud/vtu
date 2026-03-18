@@ -9,25 +9,12 @@ const supabaseAdmin = createClient(
 
 export const dynamic = 'force-dynamic';
 
-// Helper to fetch all rows beyond 1000
-async function fetchAllRows(table, select, orderCol = 'created_at', ascending = false) {
-    const PAGE = 1000;
-    let all = [];
-    let from = 0;
-    while (true) {
-        let { data, error } = await supabaseAdmin.from(table).select(select).order(orderCol, { ascending }).range(from, from + PAGE - 1);
-        if (error) throw error;
-        all = all.concat(data || []);
-        if (!data || data.length < PAGE) break;
-        from += PAGE;
-    }
-    return all;
-}
+import { fetchAllPaginated } from '../../../lib/supabase-utils';
 
 // GET — all classes (universal, not filtered by faculty) with student count
 export async function GET() {
     try {
-        const classes = await fetchAllRows('classes', '*, class_students(count)', 'created_at', false);
+        const classes = await fetchAllPaginated('classes', '*, class_students(count)', supabaseAdmin, 'created_at', false);
 
         const result = (classes || []).map(c => ({
             ...c,

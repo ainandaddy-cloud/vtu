@@ -1,12 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_KEY!
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_KEY
 )
 
-export async function POST(req: NextRequest) {
+export async function POST(req) {
     const { usn, role, force, faculty_id } = await req.json()
 
     // ── Role Guard: Only faculty/admin can trigger VTU scraping ──
