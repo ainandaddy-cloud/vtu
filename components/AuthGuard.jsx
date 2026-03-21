@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
+import { useUser } from '@clerk/nextjs';
 
 /**
  * AuthGuard — Production-grade authentication boundary.
@@ -18,10 +19,14 @@ import Link from 'next/link';
 export default function AuthGuard({ children, role = 'any', facultyAllowed = false }) {
     const router = useRouter();
     const pathname = usePathname();
+    const { isLoaded, isSignedIn, user } = useUser();
     const [authState, setAuthState] = useState('loading'); // 'loading' | 'authenticated' | 'denied'
     const [userType, setUserType] = useState(null);
 
     useEffect(() => {
+        // Wait for Clerk to load before making access decisions
+        if (!isLoaded) return;
+
         const verifySession = async () => {
             const stuStr = localStorage.getItem('student_session');
             const facStr = localStorage.getItem('faculty_session');
@@ -47,6 +52,13 @@ export default function AuthGuard({ children, role = 'any', facultyAllowed = fal
                     if (parsed.signature === expected) stuSession = parsed;
                     else localStorage.removeItem('student_session');
                 } catch (e) { localStorage.removeItem('student_session'); }
+            } else if (isSignedIn && user) {
+                // If the user just signed in via Clerk, ClerkSync might not have 
+                // written to localStorage yet. But we know they are authenticated.
+                const email = user.primaryEmailAddress?.emailAddress;
+                if (email) {
+                    stuSession = { usn: email.split('@')[0].toUpperCase(), role: 'student' };
+                }
             }
 
             if (facStr) {
@@ -58,7 +70,7 @@ export default function AuthGuard({ children, role = 'any', facultyAllowed = fal
                 } catch (e) { localStorage.removeItem('faculty_session'); }
             }
 
-            // Admin session verification
+            // ... admin verification ...
             const gatekeeper = process.env.NEXT_PUBLIC_ADMIN_GATEKEEPER || 'GF-ADMIN-PROD';
             if (admStr) {
                 try {
@@ -125,9 +137,10 @@ export default function AuthGuard({ children, role = 'any', facultyAllowed = fal
         };
 
         verifySession();
-    }, [pathname, role, facultyAllowed]);
+    }, [pathname, role, facultyAllowed, isLoaded, isSignedIn, user]);
 
-    if (authState === 'loading') {
+    // Keep loading screen until Clerk and local resolution are done
+    if (!isLoaded || authState === 'loading') {
         return (
             <div style={{
                 minHeight: '100vh', display: 'flex', flexDirection: 'column',
@@ -196,7 +209,7 @@ export default function AuthGuard({ children, role = 'any', facultyAllowed = fal
                         ) : (
                             <>
                                 <Link
-                                    href="/auth/student"
+                                    href="/sign-in"
                                     style={{
                                         display: 'block', padding: '14px', borderRadius: '12px',
                                         background: 'var(--primary)', color: 'var(--bg)',

@@ -20,6 +20,14 @@ export async function POST(request) {
             );
         }
 
+        // Domain restriction check
+        if (!email.toLowerCase().endsWith('@anjuman.edu.in')) {
+            return NextResponse.json(
+                { error: 'Only institutional emails (@anjuman.edu.in) are permitted to register.' },
+                { status: 403 }
+            );
+        }
+
         if (password.length < 6) {
             return NextResponse.json(
                 { error: 'Password must be at least 6 characters.' },

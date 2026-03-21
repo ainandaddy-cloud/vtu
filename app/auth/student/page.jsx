@@ -4,12 +4,14 @@ import { useState, useEffect, Suspense } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { useSignIn, SignUp } from '@clerk/nextjs';
 
 function StudentAuthContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
+    const { isLoaded, signIn, setActive } = useSignIn();
     const [mode, setMode] = useState(searchParams.get('mode') || 'login'); // 'login' | 'activate' | 'forgot' | 'show_pin'
-    const [usn, setUsn] = useState('');
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [pin, setPin] = useState('');
@@ -25,68 +27,45 @@ function StudentAuthContent() {
     }, []);
 
     const handleLogin = async () => {
-        if (!usn) { setError('Please enter your USN.'); return; }
+        if (!email) { setError('Please enter your institutional email.'); return; }
         if (!password) { setError('Please enter your password.'); return; }
+        if (!isLoaded) { setError('Authentication module is still loading...'); return; }
 
         setLoading(true);
         setError('');
         setSuccess('');
 
         try {
-            const cleanUSN = usn.toUpperCase().trim();
-
-            // 1. Check if student exists
-            let { data: student, error: fetchErr } = await supabase
-                .from('students')
-                .select('*')
-                .eq('usn', cleanUSN)
-                .maybeSingle();
-
-            if (fetchErr) throw fetchErr;
-
-            if (!student) {
-                setError(`USN ${cleanUSN} is not registered. Please activate your account first or contact your faculty.`);
+            const cleanEmail = email.toLowerCase().trim();
+            if (!cleanEmail.endsWith('@anjuman.edu.in')) {
+                setError('Please use your official @anjuman.edu.in email address.');
+                setLoading(false);
                 return;
             }
 
-            // 2. If student has no password (not activated)
-            if (!student.password_hash) {
-                setError('This account has not been activated yet. Please use the "First Time? Activate" option to set your password.');
-                setMode('activate');
-                return;
+            // Headless Login with Clerk
+            const result = await signIn.create({
+                identifier: cleanEmail,
+                password: password,
+            });
+
+            if (result.status === 'complete') {
+                await setActive({ session: result.createdSessionId });
+                // Note: The ClerkSync component in layout.jsx will automatically handle
+                // mapping to Supabase and setting the local session token to boot them into /dashboard.
+                router.push('/dashboard');
+            } else {
+                console.log(result);
+                setError('Sign in requires further steps (MFA, etc). Please use the main Clerk sign in page instead.');
             }
-
-            // 3. Validate password (simple hash comparison)
-            const inputHash = await hashPassword(password);
-            if (student.password_hash !== inputHash) {
-                setError('Incorrect password. Please try again.');
-                return;
-            }
-
-            // 4. Success — store session and redirect
-            localStorage.removeItem('faculty_session'); // Ensure no conflicting sessions
-
-            const sessionData = {
-                usn: student.usn,
-                name: student.name,
-                id: student.id,
-                branch: student.branch,
-                scheme: student.scheme,
-            };
-
-            // Sign the session to prevent easy tampering
-            sessionData.signature = await hash(student.usn + student.id);
-
-            localStorage.setItem('student_session', JSON.stringify(sessionData));
-
-            router.push('/dashboard');
 
         } catch (err) {
-            console.error('Login error details:', err);
-            if (err.message === 'CRYPTO_ERROR') {
-                setError('Security Error: Your browser blocked the login process. Please ensure you are opening the HTTPS version of the ngrok link, not HTTP.');
+            console.error('Login error details:', err.errors ? err.errors : err);
+            const clerkErr = err.errors?.[0]?.longMessage || err.message;
+            if (clerkErr) {
+                setError(`Authentication failed: ${clerkErr}`);
             } else {
-                setError(`Something went wrong: ${err.message || 'Unknown error'}`);
+                setError('Invalid email or password. Please try again.');
             }
         } finally {
             setLoading(false);
@@ -389,12 +368,12 @@ function StudentAuthContent() {
                 <h1 style={s.heading}>{mode === 'forgot' ? 'Reset Password' : 'Student Access'}</h1>
                 <p style={s.subtext}>
                     {mode === 'login'
-                        ? 'Sign in with your USN and password to access your dashboard.'
+                        ? 'Sign in with your institutional email and password to access your dashboard.'
                         : mode === 'activate'
-                            ? 'First time? Set a password to activate your account.'
+                            ? 'First time? Activate your account via our secure portal.'
                             : mode === 'show_pin'
                                 ? 'Please take a screenshot of this page. You will need this PIN.'
-                                : 'Enter your USN and 4-digit Recovery PIN to reset.'}
+                                : 'Enter your institutional email and 4-digit Recovery PIN to reset.'}
                 </p>
 
                 {(mode === 'login' || mode === 'activate') && (
@@ -426,78 +405,72 @@ function StudentAuthContent() {
                     </div>
                 ) : (
                     <>
-                        <label style={s.label}>University Seat Number</label>
-                        <input
-                            style={s.input}
-                            placeholder="e.g. 4AB22CS001"
-                            value={usn}
-                            onChange={e => setUsn(e.target.value.toUpperCase())}
-                            onFocus={e => e.target.style.borderColor = 'var(--tx-main)'}
-                            onBlur={e => e.target.style.borderColor = 'var(--border)'}
-                        />
-
-                        {mode === 'forgot' && (
-                            <>
-                                <label style={s.label}>4-Digit Recovery PIN</label>
-                                <input
-                                    style={s.input}
-                                    type="password"
-                                    maxLength={4}
-                                    placeholder="e.g. 1234"
-                                    value={pin}
-                                    onChange={e => setPin(e.target.value.replace(/\D/g, ''))}
-                                    onFocus={e => e.target.style.borderColor = 'var(--tx-main)'}
-                                    onBlur={e => e.target.style.borderColor = 'var(--border)'}
-                                />
-                            </>
-                        )}
-
-                        <label style={s.label}>{mode === 'forgot' ? 'New Password' : 'Password'}</label>
-                        <input
-                            style={s.input}
-                            type="password"
-                            placeholder={mode === 'activate' ? 'Create a new password' : mode === 'forgot' ? 'Enter a new password' : 'Enter your password'}
-                            value={password}
-                            onChange={e => setPassword(e.target.value)}
-                            onFocus={e => e.target.style.borderColor = 'var(--tx-main)'}
-                            onBlur={e => e.target.style.borderColor = 'var(--border)'}
-                            onKeyDown={e => { if (e.key === 'Enter' && mode === 'login') handleLogin(); }}
-                        />
-
-                        {(mode === 'activate' || mode === 'forgot') && (
-                            <>
-                                <label style={s.label}>Confirm Password</label>
-                                <input
-                                    style={s.input}
-                                    type="password"
-                                    placeholder="Re-enter your password"
-                                    value={confirmPassword}
-                                    onChange={e => setConfirmPassword(e.target.value)}
-                                    onFocus={e => e.target.style.borderColor = 'var(--tx-main)'}
-                                    onBlur={e => e.target.style.borderColor = 'var(--border)'}
-                                />
-                            </>
-                        )}
-
-                        {mode === 'login' && (
-                            <div style={{ textAlign: 'right', marginBottom: '20px', marginTop: '-10px' }}>
-                                <span onClick={() => { setMode('forgot'); setError(''); setSuccess(''); }} style={{ fontSize: '12px', fontWeight: 600, color: 'var(--primary)', cursor: 'pointer' }}>
-                                    Forgot Password?
-                                </span>
+                        {mode === 'activate' ? (
+                            <div style={{ display: 'flex', justifyContent: 'center', margin: '20px 0' }}>
+                                <SignUp routing="hash" signInUrl="/auth/student?mode=login" />
                             </div>
-                        )}
+                        ) : (
+                            <>
+                                <label style={s.label}>Institutional Email</label>
+                                <input
+                                    style={s.input}
+                                    type="email"
+                                    placeholder="e.g. 2ab23cs001@anjuman.edu.in"
+                                    value={email}
+                                    onChange={e => setEmail(e.target.value.toLowerCase())}
+                                    onFocus={e => e.target.style.borderColor = 'var(--tx-main)'}
+                                    onBlur={e => e.target.style.borderColor = 'var(--border)'}
+                                    onKeyDown={e => { if (e.key === 'Enter' && mode === 'login') handleLogin(); }}
+                                />
 
-                        <button
-                            style={{ ...s.btn, opacity: loading ? 0.7 : 1 }}
-                            onClick={mode === 'login' ? handleLogin : mode === 'activate' ? handleActivation : handleReset}
-                            disabled={loading}
-                        >
-                            {loading ? 'Processing...' : mode === 'login' ? 'Sign In' : mode === 'activate' ? 'Activate Account' : 'Reset Password'}
-                        </button>
+                                {mode === 'forgot' && (
+                                    <>
+                                        <label style={s.label}>4-Digit Recovery PIN</label>
+                                        <input
+                                            style={s.input}
+                                            type="password"
+                                            maxLength={4}
+                                            placeholder="e.g. 1234"
+                                            value={pin}
+                                            onChange={e => setPin(e.target.value.replace(/\D/g, ''))}
+                                            onFocus={e => e.target.style.borderColor = 'var(--tx-main)'}
+                                            onBlur={e => e.target.style.borderColor = 'var(--border)'}
+                                        />
+                                    </>
+                                )}
+
+                                <label style={s.label}>Password</label>
+                                <input
+                                    style={s.input}
+                                    type="password"
+                                    placeholder="Enter your password"
+                                    value={password}
+                                    onChange={e => setPassword(e.target.value)}
+                                    onFocus={e => e.target.style.borderColor = 'var(--tx-main)'}
+                                    onBlur={e => e.target.style.borderColor = 'var(--border)'}
+                                    onKeyDown={e => { if (e.key === 'Enter' && mode === 'login') handleLogin(); }}
+                                />
+
+                                <div style={{ textAlign: 'right', marginBottom: '20px', marginTop: '-10px' }}>
+                                    <Link href="/sign-in" style={{ fontSize: '12px', fontWeight: 600, color: 'var(--primary)', textDecoration: 'none' }}>
+                                        Forgot Password? Reset securely
+                                    </Link>
+                                    <div style={{ fontSize: '11px', color: 'var(--tx-dim)', marginTop: '4px' }}>Password is managed and protected by Clerk.</div>
+                                </div>
+
+                                <button
+                                    style={{ ...s.btn, opacity: loading ? 0.7 : 1 }}
+                                    onClick={mode === 'login' ? handleLogin : handleReset}
+                                    disabled={loading}
+                                >
+                                    {loading ? 'Processing...' : mode === 'login' ? 'Sign In' : 'Reset Password'}
+                                </button>
+                            </>
+                        )}
                     </>
                 )}
 
-                <p style={s.footer}>
+                <p style={{ ...s.footer, display: mode === 'activate' ? 'none' : 'block' }}>
                     Your account is linked to your institutional USN. Faculty or admin can pre-create your profile.
                 </p>
             </div>

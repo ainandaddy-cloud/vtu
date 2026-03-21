@@ -112,10 +112,10 @@ export default function PortalEntry() {
                             <span style={s.cardTag}>For Students</span>
                             <h2 style={s.cardTitle}>Your academic record awaits.</h2>
                             <p style={s.cardDesc}>
-                                Sign in with your USN and password to view marks, calculate your SGPA, and track your semester progress.
+                                Sign in with your official @anjuman.edu.in email to view marks, calculate your SGPA, and track your semester progress.
                             </p>
                             <div style={s.divider}></div>
-                            <Link href="/auth/student" style={s.primaryBtn}>
+                            <Link href="/auth/student?mode=login" style={s.primaryBtn}>
                                 Sign in as a student
                             </Link>
                             <Link href="/auth/student?mode=activate" style={s.ghostBtn}>

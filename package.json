@@ -4,8 +4,8 @@
   "description": "VTU CGPA Calculator SaaS - Visvesvaraya Technological University",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "cross-env NODE_OPTIONS=--max-old-space-size=4096 next dev",
+    "build": "cross-env NODE_OPTIONS=--max-old-space-size=4096 next build",
     "start": "next start",
     "lint": "next lint"
   },
@@ -24,6 +24,7 @@
   },
   "devDependencies": {
     "@types/react": "19.2.14",
+    "cross-env": "^10.1.0",
     "eslint": "^8",
     "eslint-config-next": "14.2.3",
     "typescript": "5.9.3"
